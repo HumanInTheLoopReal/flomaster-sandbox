@@ -1,0 +1,427 @@
+{
+  "workflow_definition_id": {
+    "value": "workflow_review"
+  },
+  "version": "1",
+  "name": "Review",
+  "description": "Review one change twice with a repair between the passes only when the first pass asks for one, and check the reviewed tree once mechanically.",
+  "visibility": "public",
+  "steps": [
+    {
+      "kind": "agent",
+      "step_definition_id": "first_pass",
+      "name": "Review the change",
+      "description": "Judge the change against its request and either approve it or raise one concern.",
+      "agent": {
+        "agent_profile_id": "agent_profile_review_first_pass",
+        "version": "1"
+      },
+      "runtime": {
+        "runtime_id": "claude_agent_sdk",
+        "sdk_tool_ids": [],
+        "skill_ids": [],
+        "budget": {
+          "max_turns": 4,
+          "max_cost_usd": 0.5
+        },
+        "context_token_budget": 4000
+      },
+      "granted_operations": [],
+      "outputs": [
+        {
+          "kind": "value",
+          "output_name": "verdict",
+          "data_schema": {
+            "content_digest": "sha256:review-first-pass-verdict",
+            "contract": {
+              "schema_name": "ReviewVerdict",
+              "json_schema": {
+                "type": "object",
+                "properties": {
+                  "status": {
+                    "type": "string",
+                    "enum": [
+                      "approved",
+                      "changes_requested"
+                    ]
+                  },
+                  "summary": {
+                    "type": "string",
+                    "maxLength": 2000
+                  },
+                  "finding_id": {
+                    "type": "string",
+                    "maxLength": 200
+                  },
+                  "severity": {
+                    "type": "string",
+                    "enum": [
+                      "skippable",
+                      "technical_debt",
+                      "blocker"
+                    ]
+                  },
+                  "location": {
+                    "type": "string",
+                    "maxLength": 1000
+                  }
+                },
+                "required": [
+                  "status",
+                  "summary"
+                ],
+                "additionalProperties": false
+              }
+            }
+          },
+          "required": true
+        }
+      ],
+      "routes": {
+        "on": "verdict",
+        "field": "status",
+        "branches": [
+          {
+            "outcome": "changes_requested",
+            "target_step_definition_ids": [
+              "repair"
+            ]
+          },
+          {
+            "outcome": "approved",
+            "target_step_definition_ids": [
+              "record_clean"
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "kind": "agent",
+      "step_definition_id": "repair",
+      "name": "Answer the concern",
+      "description": "Make the one change the first pass asked for and report what was done.",
+      "dependencies": [
+        {
+          "step_definition_id": "first_pass",
+          "mode": "required"
+        }
+      ],
+      "agent": {
+        "agent_profile_id": "agent_profile_review_repair",
+        "version": "1"
+      },
+      "runtime": {
+        "runtime_id": "claude_agent_sdk",
+        "sdk_tool_ids": [],
+        "skill_ids": [],
+        "budget": {
+          "max_turns": 6,
+          "max_cost_usd": 0.5
+        },
+        "context_token_budget": 4000
+      },
+      "granted_operations": [],
+      "inputs": [
+        {
+          "input_name": "verdict",
+          "value": {
+            "kind": "upstream_output",
+            "step_definition_id": "first_pass",
+            "output_name": "verdict",
+            "data_schema": {
+              "content_digest": "sha256:review-first-pass-verdict",
+              "contract": {
+                "schema_name": "ReviewVerdict",
+                "json_schema": {
+                  "type": "object",
+                  "properties": {
+                    "status": {
+                      "type": "string",
+                      "enum": [
+                        "approved",
+                        "changes_requested"
+                      ]
+                    },
+                    "summary": {
+                      "type": "string",
+                      "maxLength": 2000
+                    },
+                    "finding_id": {
+                      "type": "string",
+                      "maxLength": 200
+                    },
+                    "severity": {
+                      "type": "string",
+                      "enum": [
+                        "skippable",
+                        "technical_debt",
+                        "blocker"
+                      ]
+                    },
+                    "location": {
+                      "type": "string",
+                      "maxLength": 1000
+                    }
+                  },
+                  "required": [
+                    "status",
+                    "summary"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          }
+        }
+      ],
+      "outputs": [
+        {
+          "kind": "value",
+          "output_name": "repair_note",
+          "data_schema": {
+            "content_digest": "sha256:review-repair-resolution",
+            "contract": {
+              "schema_name": "ReviewRepairNote",
+              "json_schema": {
+                "type": "object",
+                "properties": {
+                  "resolution": {
+                    "type": "string",
+                    "maxLength": 2000
+                  }
+                },
+                "required": [
+                  "resolution"
+                ],
+                "additionalProperties": false
+              }
+            }
+          },
+          "required": true
+        }
+      ]
+    },
+    {
+      "kind": "script",
+      "step_definition_id": "record_clean",
+      "name": "Record an unchanged review",
+      "description": "Settle the sibling branch when the first pass asked for no change.",
+      "dependencies": [
+        {
+          "step_definition_id": "first_pass",
+          "mode": "required"
+        }
+      ],
+      "executable": ".flomaster/scripts/record-clean.sh",
+      "runtime": "posix_shell",
+      "arguments": []
+    },
+    {
+      "kind": "agent",
+      "step_definition_id": "second_pass",
+      "name": "Review the change again",
+      "description": "Read the change a second time and record the concern it raised as settled or not.",
+      "dependencies": [
+        {
+          "step_definition_id": "repair",
+          "mode": "ordinary"
+        },
+        {
+          "step_definition_id": "record_clean",
+          "mode": "ordinary"
+        }
+      ],
+      "agent": {
+        "agent_profile_id": "agent_profile_review_second_pass",
+        "version": "1"
+      },
+      "runtime": {
+        "runtime_id": "claude_agent_sdk",
+        "sdk_tool_ids": [],
+        "skill_ids": [],
+        "budget": {
+          "max_turns": 4,
+          "max_cost_usd": 0.5
+        },
+        "context_token_budget": 4000
+      },
+      "granted_operations": [],
+      "inputs": [
+        {
+          "input_name": "verdict",
+          "value": {
+            "kind": "upstream_output",
+            "step_definition_id": "first_pass",
+            "output_name": "verdict",
+            "data_schema": {
+              "content_digest": "sha256:review-first-pass-verdict",
+              "contract": {
+                "schema_name": "ReviewVerdict",
+                "json_schema": {
+                  "type": "object",
+                  "properties": {
+                    "status": {
+                      "type": "string",
+                      "enum": [
+                        "approved",
+                        "changes_requested"
+                      ]
+                    },
+                    "summary": {
+                      "type": "string",
+                      "maxLength": 2000
+                    },
+                    "finding_id": {
+                      "type": "string",
+                      "maxLength": 200
+                    },
+                    "severity": {
+                      "type": "string",
+                      "enum": [
+                        "skippable",
+                        "technical_debt",
+                        "blocker"
+                      ]
+                    },
+                    "location": {
+                      "type": "string",
+                      "maxLength": 1000
+                    }
+                  },
+                  "required": [
+                    "status",
+                    "summary"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          }
+        }
+      ],
+      "outputs": [
+        {
+          "kind": "value",
+          "output_name": "finding",
+          "data_schema": {
+            "content_digest": "sha256:review-second-pass-finding",
+            "contract": {
+              "schema_name": "ReviewFinding",
+              "json_schema": {
+                "type": "object",
+                "properties": {
+                  "finding_id": {
+                    "type": "string",
+                    "maxLength": 200
+                  },
+                  "severity": {
+                    "type": "string",
+                    "enum": [
+                      "skippable",
+                      "technical_debt",
+                      "blocker"
+                    ]
+                  },
+                  "location": {
+                    "type": "string",
+                    "maxLength": 1000
+                  },
+                  "summary": {
+                    "type": "string",
+                    "maxLength": 2000
+                  },
+                  "resolution": {
+                    "type": "string",
+                    "maxLength": 2000
+                  },
+                  "resolved": {
+                    "type": "boolean"
+                  }
+                },
+                "required": [
+                  "finding_id",
+                  "severity",
+                  "location",
+                  "summary",
+                  "resolution",
+                  "resolved"
+                ],
+                "additionalProperties": false
+              }
+            }
+          },
+          "required": true
+        }
+      ],
+      "evidence": {
+        "kind": "review",
+        "output_name": "finding"
+      }
+    },
+    {
+      "kind": "script",
+      "step_definition_id": "confirm_component",
+      "name": "Confirm the reviewed file is present",
+      "description": "Run the phase's own deterministic check over the tree both passes read.",
+      "dependencies": [
+        {
+          "step_definition_id": "first_pass",
+          "mode": "required"
+        }
+      ],
+      "executable": ".flomaster/scripts/confirm-component.sh",
+      "runtime": "posix_shell",
+      "arguments": [],
+      "outputs": [
+        {
+          "kind": "value",
+          "output_name": "component_check",
+          "data_schema": {
+            "content_digest": "sha256:review-component-check",
+            "contract": {
+              "schema_name": "ReviewComponentCheck",
+              "json_schema": {
+                "type": "object",
+                "properties": {
+                  "check_name": {
+                    "type": "string",
+                    "maxLength": 300
+                  },
+                  "command": {
+                    "type": "string",
+                    "maxLength": 4096
+                  },
+                  "purpose": {
+                    "type": "string",
+                    "maxLength": 2000
+                  },
+                  "passed": {
+                    "type": "boolean"
+                  },
+                  "summary": {
+                    "type": "string",
+                    "maxLength": 5000
+                  }
+                },
+                "required": [
+                  "check_name",
+                  "command",
+                  "purpose",
+                  "passed",
+                  "summary"
+                ],
+                "additionalProperties": false
+              }
+            }
+          },
+          "required": true
+        }
+      ],
+      "evidence": {
+        "kind": "check",
+        "output_name": "component_check"
+      }
+    }
+  ]
+}

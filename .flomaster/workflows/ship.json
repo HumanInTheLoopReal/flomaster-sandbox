@@ -1,0 +1,1679 @@
+{
+  "workflow_definition_id": {
+    "value": "workflow_ship"
+  },
+  "version": "1",
+  "name": "Ship",
+  "description": "Take one change from the Workspace to a merged Change Request, pausing for the one approval a person owes.",
+  "visibility": "public",
+  "steps": [
+    {
+      "kind": "source_control",
+      "step_definition_id": "branch",
+      "name": "Name the Run branch",
+      "description": "Record the branch this Run publishes its change on.",
+      "action": "branch",
+      "inputs": [
+        {
+          "input_name": "name",
+          "value": {
+            "kind": "workspace",
+            "fact": "branch_name",
+            "data_schema": {
+              "content_digest": "sha256:5fddca17fd910d3d6f16011817114f88224aa826a2667d118a49fe09c620b138",
+              "contract": {
+                "schema_name": "GitBranchName",
+                "json_schema": {
+                  "type": "string",
+                  "minLength": 1,
+                  "maxLength": 500
+                }
+              }
+            }
+          }
+        }
+      ],
+      "outputs": [
+        {
+          "kind": "value",
+          "output_name": "branch",
+          "data_schema": {
+            "content_digest": "sha256:12a528c3dc16b83dd142ed43c7233f4d0913cc4cb45c648fcde306cf78336afb",
+            "contract": {
+              "schema_name": "BranchReference",
+              "json_schema": {
+                "$defs": {
+                  "WorkflowRunId": {
+                    "type": "object",
+                    "properties": {
+                      "value": {
+                        "type": "string",
+                        "minLength": 3,
+                        "maxLength": 200
+                      }
+                    },
+                    "required": [
+                      "value"
+                    ],
+                    "additionalProperties": false
+                  }
+                },
+                "type": "object",
+                "properties": {
+                  "repository": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 1000
+                  },
+                  "name": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 500
+                  },
+                  "workflow_run_id": {
+                    "$ref": "#/$defs/WorkflowRunId"
+                  },
+                  "base_revision": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 500
+                  },
+                  "revision": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 500
+                  }
+                },
+                "required": [
+                  "repository",
+                  "name",
+                  "workflow_run_id",
+                  "base_revision",
+                  "revision"
+                ],
+                "additionalProperties": false
+              }
+            }
+          },
+          "required": true
+        }
+      ]
+    },
+    {
+      "kind": "agent",
+      "step_definition_id": "note",
+      "name": "Draft the shipping note",
+      "description": "Write the text of the note that records what is shipping.",
+      "agent": {
+        "agent_profile_id": "agent_profile_ship_note_writer",
+        "version": "1"
+      },
+      "runtime": {
+        "runtime_id": "claude_agent_sdk",
+        "sdk_tool_ids": [],
+        "skill_ids": [],
+        "budget": {
+          "max_turns": 2,
+          "max_cost_usd": 0.5
+        },
+        "context_token_budget": 4000
+      },
+      "granted_operations": [],
+      "dependencies": [
+        {
+          "step_definition_id": "branch",
+          "mode": "required"
+        }
+      ],
+      "outputs": [
+        {
+          "kind": "value",
+          "output_name": "heading",
+          "data_schema": {
+            "content_digest": "sha256:ship-note-heading",
+            "contract": {
+              "schema_name": "ShipNoteHeading",
+              "json_schema": {
+                "type": "string",
+                "minLength": 4,
+                "maxLength": 120
+              }
+            }
+          },
+          "required": true
+        },
+        {
+          "kind": "value",
+          "output_name": "body",
+          "data_schema": {
+            "content_digest": "sha256:ship-note-body",
+            "contract": {
+              "schema_name": "ShipNoteBody",
+              "json_schema": {
+                "type": "string",
+                "minLength": 20,
+                "maxLength": 2000
+              }
+            }
+          },
+          "required": true
+        }
+      ]
+    },
+    {
+      "kind": "script",
+      "step_definition_id": "write_note",
+      "name": "Write the shipping note file",
+      "description": "Write the drafted note to the one path this pack declares.",
+      "executable": ".flomaster/scripts/write_note.sh",
+      "runtime": "posix_shell",
+      "dependencies": [
+        {
+          "step_definition_id": "note",
+          "mode": "required"
+        }
+      ],
+      "arguments": [
+        {
+          "kind": "format",
+          "segments": [
+            {
+              "kind": "literal",
+              "text": "SHIP-NOTE.md"
+            }
+          ],
+          "data_schema": {
+            "content_digest": "sha256:ship-literal-format",
+            "contract": {
+              "schema_name": "ShipLiteralFormat",
+              "json_schema": {
+                "type": "object",
+                "additionalProperties": false
+              }
+            }
+          }
+        }
+      ],
+      "inputs": [
+        {
+          "input_name": "heading",
+          "value": {
+            "kind": "upstream_output",
+            "step_definition_id": "note",
+            "output_name": "heading",
+            "data_schema": {
+              "content_digest": "sha256:ship-note-heading",
+              "contract": {
+                "schema_name": "ShipNoteHeading",
+                "json_schema": {
+                  "type": "string",
+                  "minLength": 4,
+                  "maxLength": 120
+                }
+              }
+            }
+          }
+        },
+        {
+          "input_name": "body",
+          "value": {
+            "kind": "upstream_output",
+            "step_definition_id": "note",
+            "output_name": "body",
+            "data_schema": {
+              "content_digest": "sha256:ship-note-body",
+              "contract": {
+                "schema_name": "ShipNoteBody",
+                "json_schema": {
+                  "type": "string",
+                  "minLength": 20,
+                  "maxLength": 2000
+                }
+              }
+            }
+          }
+        }
+      ],
+      "outputs": [
+        {
+          "kind": "file",
+          "output_name": "note_file",
+          "path": {
+            "kind": "format",
+            "segments": [
+              {
+                "kind": "literal",
+                "text": "SHIP-NOTE.md"
+              }
+            ],
+            "data_schema": {
+              "content_digest": "sha256:ship-literal-format",
+              "contract": {
+                "schema_name": "ShipLiteralFormat",
+                "json_schema": {
+                  "type": "object",
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "artifact_kind": "documentation",
+          "required": true,
+          "max_bytes": 4096
+        },
+        {
+          "kind": "value",
+          "output_name": "paths",
+          "data_schema": {
+            "content_digest": "sha256:baf3f14c5ff42d64c507d09861ae5a99da2e9a79a9da03be3375389a8bc86599",
+            "contract": {
+              "schema_name": "GitStagePaths",
+              "json_schema": {
+                "type": "array",
+                "minItems": 1,
+                "uniqueItems": true,
+                "items": {
+                  "type": "string",
+                  "minLength": 1,
+                  "maxLength": 4096
+                }
+              }
+            }
+          },
+          "required": true
+        }
+      ]
+    },
+    {
+      "kind": "source_control",
+      "step_definition_id": "stage",
+      "name": "Stage what was written",
+      "description": "Stage exactly the paths the writing Step reports having written.",
+      "action": "stage",
+      "dependencies": [
+        {
+          "step_definition_id": "write_note",
+          "mode": "required"
+        }
+      ],
+      "inputs": [
+        {
+          "input_name": "paths",
+          "value": {
+            "kind": "upstream_output",
+            "step_definition_id": "write_note",
+            "output_name": "paths",
+            "data_schema": {
+              "content_digest": "sha256:baf3f14c5ff42d64c507d09861ae5a99da2e9a79a9da03be3375389a8bc86599",
+              "contract": {
+                "schema_name": "GitStagePaths",
+                "json_schema": {
+                  "type": "array",
+                  "minItems": 1,
+                  "uniqueItems": true,
+                  "items": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 4096
+                  }
+                }
+              }
+            }
+          }
+        }
+      ],
+      "outputs": [
+        {
+          "kind": "value",
+          "output_name": "staged",
+          "data_schema": {
+            "content_digest": "sha256:c3075360354e1924c45f18e9f4b137927d6377d64f4802486b60695647224b46",
+            "contract": {
+              "schema_name": "GitStageResult",
+              "json_schema": {
+                "type": "object",
+                "properties": {
+                  "paths": {
+                    "type": "array",
+                    "minItems": 1,
+                    "uniqueItems": true,
+                    "items": {
+                      "type": "string",
+                      "minLength": 1,
+                      "maxLength": 4096
+                    }
+                  },
+                  "head_revision": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 500,
+                    "pattern": "^(?![\\s\\S]*\\s)[\\s\\S]+$"
+                  }
+                },
+                "required": [
+                  "paths",
+                  "head_revision"
+                ],
+                "additionalProperties": false
+              }
+            }
+          },
+          "required": true
+        }
+      ]
+    },
+    {
+      "kind": "source_control",
+      "step_definition_id": "commit",
+      "name": "Commit the staged change",
+      "description": "Commit what is staged, so the branch carries something to merge.",
+      "action": "commit",
+      "dependencies": [
+        {
+          "step_definition_id": "stage",
+          "mode": "required"
+        }
+      ],
+      "inputs": [
+        {
+          "input_name": "message",
+          "value": {
+            "kind": "literal",
+            "value": "Add the shipping note for this change",
+            "data_schema": {
+              "content_digest": "sha256:b04c2f8290f8b647886aa181f31723ef07c3a61f708e5584efcf5fe2d456470a",
+              "contract": {
+                "schema_name": "GitCommitMessage",
+                "json_schema": {
+                  "type": "string",
+                  "minLength": 1,
+                  "maxLength": 100000,
+                  "pattern": "\\S"
+                }
+              }
+            }
+          }
+        }
+      ],
+      "outputs": [
+        {
+          "kind": "value",
+          "output_name": "committed",
+          "data_schema": {
+            "content_digest": "sha256:075cd535dc545111b773aaf43d273e4d97d42daf4327b22f3baf7f7796dedce7",
+            "contract": {
+              "schema_name": "GitCommitResult",
+              "json_schema": {
+                "$defs": {
+                  "CommitReference": {
+                    "type": "object",
+                    "properties": {
+                      "repository": {
+                        "type": "string",
+                        "minLength": 1,
+                        "maxLength": 1000,
+                        "pattern": "^(?![\\s\\S]*\\s)[\\s\\S]+$"
+                      },
+                      "revision": {
+                        "type": "string",
+                        "minLength": 1,
+                        "maxLength": 500,
+                        "pattern": "^(?![\\s\\S]*\\s)[\\s\\S]+$"
+                      },
+                      "parent_revision": {
+                        "type": "string",
+                        "minLength": 1,
+                        "maxLength": 500,
+                        "pattern": "^(?![\\s\\S]*\\s)[\\s\\S]+$"
+                      }
+                    },
+                    "required": [
+                      "repository",
+                      "revision",
+                      "parent_revision"
+                    ],
+                    "additionalProperties": false
+                  }
+                },
+                "type": "object",
+                "properties": {
+                  "commit": {
+                    "anyOf": [
+                      {
+                        "$ref": "#/$defs/CommitReference"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ]
+                  },
+                  "clean": {
+                    "type": "boolean"
+                  }
+                },
+                "required": [
+                  "commit",
+                  "clean"
+                ],
+                "additionalProperties": false,
+                "oneOf": [
+                  {
+                    "properties": {
+                      "commit": {
+                        "$ref": "#/$defs/CommitReference"
+                      },
+                      "clean": {
+                        "const": false
+                      }
+                    }
+                  },
+                  {
+                    "properties": {
+                      "commit": {
+                        "type": "null"
+                      },
+                      "clean": {
+                        "const": true
+                      }
+                    }
+                  }
+                ]
+              }
+            }
+          },
+          "required": true
+        }
+      ]
+    },
+    {
+      "kind": "source_control",
+      "step_definition_id": "publish",
+      "name": "Publish the branch",
+      "description": "Push the branch, which a Change Request cannot be opened without.",
+      "action": "push",
+      "dependencies": [
+        {
+          "step_definition_id": "commit",
+          "mode": "required"
+        }
+      ],
+      "inputs": [
+        {
+          "input_name": "branch",
+          "value": {
+            "kind": "workspace",
+            "fact": "branch_name",
+            "data_schema": {
+              "content_digest": "sha256:135c7b45130fbf7661af079190c1b4e431cbc15f24fef1f4efccaf5d12dcbbed",
+              "contract": {
+                "schema_name": "GitPushBranch",
+                "json_schema": {
+                  "type": "string",
+                  "minLength": 1,
+                  "maxLength": 500,
+                  "pattern": "^(?![\\s\\S]*\\s)[\\s\\S]+$"
+                }
+              }
+            }
+          }
+        }
+      ],
+      "outputs": [
+        {
+          "kind": "value",
+          "output_name": "published",
+          "data_schema": {
+            "content_digest": "sha256:1b32c0aa7963accdf3e85c1223d899853110637f1bcd0b2e342d8858802d000d",
+            "contract": {
+              "schema_name": "PublishedBranchReference",
+              "json_schema": {
+                "$defs": {
+                  "WorkflowRunId": {
+                    "type": "object",
+                    "properties": {
+                      "value": {
+                        "type": "string",
+                        "minLength": 14,
+                        "maxLength": 200,
+                        "pattern": "^workflow_run_(?![\\s\\S]*\\s)[\\s\\S]+$"
+                      }
+                    },
+                    "required": [
+                      "value"
+                    ],
+                    "additionalProperties": false
+                  }
+                },
+                "type": "object",
+                "properties": {
+                  "repository": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 1000,
+                    "pattern": "^(?![\\s\\S]*\\s)[\\s\\S]+$"
+                  },
+                  "name": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 500,
+                    "pattern": "^(?![\\s\\S]*\\s)[\\s\\S]+$"
+                  },
+                  "workflow_run_id": {
+                    "$ref": "#/$defs/WorkflowRunId"
+                  },
+                  "remote_name": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 500,
+                    "pattern": "^(?![\\s\\S]*\\s)[\\s\\S]+$"
+                  },
+                  "revision": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 500,
+                    "pattern": "^(?![\\s\\S]*\\s)[\\s\\S]+$"
+                  }
+                },
+                "required": [
+                  "repository",
+                  "name",
+                  "workflow_run_id",
+                  "remote_name",
+                  "revision"
+                ],
+                "additionalProperties": false
+              }
+            }
+          },
+          "required": true
+        }
+      ]
+    },
+    {
+      "kind": "agent",
+      "step_definition_id": "pr_text",
+      "name": "Write the Change Request text",
+      "description": "Write the title and body a reviewer reads before approving.",
+      "agent": {
+        "agent_profile_id": "agent_profile_ship_pr_author",
+        "version": "1"
+      },
+      "runtime": {
+        "runtime_id": "claude_agent_sdk",
+        "sdk_tool_ids": [],
+        "skill_ids": [],
+        "budget": {
+          "max_turns": 2,
+          "max_cost_usd": 0.5
+        },
+        "context_token_budget": 4000
+      },
+      "granted_operations": [],
+      "dependencies": [
+        {
+          "step_definition_id": "publish",
+          "mode": "required"
+        }
+      ],
+      "outputs": [
+        {
+          "kind": "value",
+          "output_name": "title",
+          "data_schema": {
+            "content_digest": "sha256:c13cc60f7ae51aacb8d23f05b3e6471d49919a4cc9afffa63c28dea3f66bcb6b",
+            "contract": {
+              "schema_name": "GitOpenPullRequestTitle",
+              "json_schema": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 10000,
+                "pattern": "\\S"
+              }
+            }
+          },
+          "required": true
+        },
+        {
+          "kind": "value",
+          "output_name": "body",
+          "data_schema": {
+            "content_digest": "sha256:17bbdc4c3582b8d814084626023d68c947c193633f5bd6fff7d1bdc4b28bcd06",
+            "contract": {
+              "schema_name": "GitOpenPullRequestBody",
+              "json_schema": {
+                "type": "string",
+                "maxLength": 100000
+              }
+            }
+          },
+          "required": true
+        }
+      ]
+    },
+    {
+      "kind": "source_control",
+      "step_definition_id": "open_pr",
+      "name": "Open the Change Request",
+      "description": "Open one Change Request carrying the text the Agent wrote.",
+      "action": "open_pr",
+      "dependencies": [
+        {
+          "step_definition_id": "pr_text",
+          "mode": "required"
+        }
+      ],
+      "inputs": [
+        {
+          "input_name": "title",
+          "value": {
+            "kind": "upstream_output",
+            "step_definition_id": "pr_text",
+            "output_name": "title",
+            "data_schema": {
+              "content_digest": "sha256:c13cc60f7ae51aacb8d23f05b3e6471d49919a4cc9afffa63c28dea3f66bcb6b",
+              "contract": {
+                "schema_name": "GitOpenPullRequestTitle",
+                "json_schema": {
+                  "type": "string",
+                  "minLength": 1,
+                  "maxLength": 10000,
+                  "pattern": "\\S"
+                }
+              }
+            }
+          }
+        },
+        {
+          "input_name": "body",
+          "value": {
+            "kind": "upstream_output",
+            "step_definition_id": "pr_text",
+            "output_name": "body",
+            "data_schema": {
+              "content_digest": "sha256:17bbdc4c3582b8d814084626023d68c947c193633f5bd6fff7d1bdc4b28bcd06",
+              "contract": {
+                "schema_name": "GitOpenPullRequestBody",
+                "json_schema": {
+                  "type": "string",
+                  "maxLength": 100000
+                }
+              }
+            }
+          }
+        },
+        {
+          "input_name": "base",
+          "value": {
+            "kind": "literal",
+            "value": "main",
+            "data_schema": {
+              "content_digest": "sha256:135c7b45130fbf7661af079190c1b4e431cbc15f24fef1f4efccaf5d12dcbbed",
+              "contract": {
+                "schema_name": "GitOpenPullRequestBase",
+                "json_schema": {
+                  "type": "string",
+                  "minLength": 1,
+                  "maxLength": 500,
+                  "pattern": "^(?![\\s\\S]*\\s)[\\s\\S]+$"
+                }
+              }
+            }
+          }
+        }
+      ],
+      "outputs": [
+        {
+          "kind": "value",
+          "output_name": "change_request",
+          "data_schema": {
+            "content_digest": "sha256:1ce096d1ab2266ecc934226b2fa367512dc033821e47d9a12c96ce7ea7939cd5",
+            "contract": {
+              "schema_name": "ChangeRequestReference",
+              "json_schema": {
+                "$defs": {
+                  "WorkflowRunId": {
+                    "type": "object",
+                    "properties": {
+                      "value": {
+                        "type": "string",
+                        "minLength": 14,
+                        "maxLength": 200,
+                        "pattern": "^workflow_run_(?![\\s\\S]*\\s)[\\s\\S]+$"
+                      }
+                    },
+                    "required": [
+                      "value"
+                    ],
+                    "additionalProperties": false
+                  },
+                  "BranchReference": {
+                    "type": "object",
+                    "properties": {
+                      "repository": {
+                        "type": "string",
+                        "minLength": 1,
+                        "maxLength": 1000,
+                        "pattern": "^(?![\\s\\S]*\\s)[\\s\\S]+$"
+                      },
+                      "name": {
+                        "type": "string",
+                        "minLength": 1,
+                        "maxLength": 500,
+                        "pattern": "^(?![\\s\\S]*\\s)[\\s\\S]+$"
+                      },
+                      "workflow_run_id": {
+                        "$ref": "#/$defs/WorkflowRunId"
+                      },
+                      "base_revision": {
+                        "type": "string",
+                        "minLength": 1,
+                        "maxLength": 500,
+                        "pattern": "^(?![\\s\\S]*\\s)[\\s\\S]+$"
+                      },
+                      "revision": {
+                        "type": "string",
+                        "minLength": 1,
+                        "maxLength": 500,
+                        "pattern": "^(?![\\s\\S]*\\s)[\\s\\S]+$"
+                      }
+                    },
+                    "required": [
+                      "repository",
+                      "name",
+                      "workflow_run_id",
+                      "base_revision",
+                      "revision"
+                    ],
+                    "additionalProperties": false
+                  }
+                },
+                "type": "object",
+                "properties": {
+                  "provider_name": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 100,
+                    "pattern": "^(?![\\s\\S]*\\s)[\\s\\S]+$"
+                  },
+                  "external_id": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 500,
+                    "pattern": "^(?![\\s\\S]*\\s)[\\s\\S]+$"
+                  },
+                  "url": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 4096,
+                    "pattern": "^https?://(?![\\s\\S]*\\s)[\\s\\S]+$"
+                  },
+                  "source_branch": {
+                    "$ref": "#/$defs/BranchReference"
+                  },
+                  "target_branch": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 500,
+                    "pattern": "^(?![\\s\\S]*\\s)[\\s\\S]+$"
+                  }
+                },
+                "required": [
+                  "provider_name",
+                  "external_id",
+                  "url",
+                  "source_branch",
+                  "target_branch"
+                ],
+                "additionalProperties": false
+              }
+            }
+          },
+          "required": true
+        }
+      ]
+    },
+    {
+      "kind": "source_control",
+      "step_definition_id": "wait_checks",
+      "name": "Wait for the checks",
+      "description": "Wait for the Change Request's checks to settle before a person is asked.",
+      "action": "wait_checks",
+      "dependencies": [
+        {
+          "step_definition_id": "open_pr",
+          "mode": "required"
+        }
+      ],
+      "inputs": [
+        {
+          "input_name": "pr",
+          "value": {
+            "kind": "upstream_output",
+            "step_definition_id": "open_pr",
+            "output_name": "change_request",
+            "data_schema": {
+              "content_digest": "sha256:1ce096d1ab2266ecc934226b2fa367512dc033821e47d9a12c96ce7ea7939cd5",
+              "contract": {
+                "schema_name": "ChangeRequestReference",
+                "json_schema": {
+                  "$defs": {
+                    "WorkflowRunId": {
+                      "type": "object",
+                      "properties": {
+                        "value": {
+                          "type": "string",
+                          "minLength": 14,
+                          "maxLength": 200,
+                          "pattern": "^workflow_run_(?![\\s\\S]*\\s)[\\s\\S]+$"
+                        }
+                      },
+                      "required": [
+                        "value"
+                      ],
+                      "additionalProperties": false
+                    },
+                    "BranchReference": {
+                      "type": "object",
+                      "properties": {
+                        "repository": {
+                          "type": "string",
+                          "minLength": 1,
+                          "maxLength": 1000,
+                          "pattern": "^(?![\\s\\S]*\\s)[\\s\\S]+$"
+                        },
+                        "name": {
+                          "type": "string",
+                          "minLength": 1,
+                          "maxLength": 500,
+                          "pattern": "^(?![\\s\\S]*\\s)[\\s\\S]+$"
+                        },
+                        "workflow_run_id": {
+                          "$ref": "#/$defs/WorkflowRunId"
+                        },
+                        "base_revision": {
+                          "type": "string",
+                          "minLength": 1,
+                          "maxLength": 500,
+                          "pattern": "^(?![\\s\\S]*\\s)[\\s\\S]+$"
+                        },
+                        "revision": {
+                          "type": "string",
+                          "minLength": 1,
+                          "maxLength": 500,
+                          "pattern": "^(?![\\s\\S]*\\s)[\\s\\S]+$"
+                        }
+                      },
+                      "required": [
+                        "repository",
+                        "name",
+                        "workflow_run_id",
+                        "base_revision",
+                        "revision"
+                      ],
+                      "additionalProperties": false
+                    }
+                  },
+                  "type": "object",
+                  "properties": {
+                    "provider_name": {
+                      "type": "string",
+                      "minLength": 1,
+                      "maxLength": 100,
+                      "pattern": "^(?![\\s\\S]*\\s)[\\s\\S]+$"
+                    },
+                    "external_id": {
+                      "type": "string",
+                      "minLength": 1,
+                      "maxLength": 500,
+                      "pattern": "^(?![\\s\\S]*\\s)[\\s\\S]+$"
+                    },
+                    "url": {
+                      "type": "string",
+                      "minLength": 1,
+                      "maxLength": 4096,
+                      "pattern": "^https?://(?![\\s\\S]*\\s)[\\s\\S]+$"
+                    },
+                    "source_branch": {
+                      "$ref": "#/$defs/BranchReference"
+                    },
+                    "target_branch": {
+                      "type": "string",
+                      "minLength": 1,
+                      "maxLength": 500,
+                      "pattern": "^(?![\\s\\S]*\\s)[\\s\\S]+$"
+                    }
+                  },
+                  "required": [
+                    "provider_name",
+                    "external_id",
+                    "url",
+                    "source_branch",
+                    "target_branch"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          }
+        },
+        {
+          "input_name": "timeout",
+          "value": {
+            "kind": "literal",
+            "value": 60,
+            "data_schema": {
+              "content_digest": "sha256:4d4b977bdd05938a907672016cdd2d45f42f728d90fa5119492233a41d00781d",
+              "contract": {
+                "schema_name": "GitCheckWaitTimeoutSeconds",
+                "json_schema": {
+                  "type": "integer",
+                  "minimum": 1,
+                  "maximum": 86400
+                }
+              }
+            }
+          }
+        }
+      ],
+      "outputs": [
+        {
+          "kind": "value",
+          "output_name": "outcome",
+          "data_schema": {
+            "content_digest": "sha256:5b0ac896286a4ea62a3ddcc37e23b19e9495195f5a109320f6b0749df449a20c",
+            "contract": {
+              "schema_name": "ChangeRequestCheckOutcome",
+              "json_schema": {
+                "type": "object",
+                "properties": {
+                  "conclusion": {
+                    "type": "string",
+                    "enum": [
+                      "passed",
+                      "failed",
+                      "timed_out"
+                    ]
+                  }
+                },
+                "required": [
+                  "conclusion"
+                ],
+                "additionalProperties": false
+              }
+            }
+          },
+          "required": true
+        },
+        {
+          "kind": "value",
+          "output_name": "report",
+          "data_schema": {
+            "content_digest": "sha256:30deb68c695d8e834d62bf97dfa044b138db0dc24fe792af0e95f40ca5744130",
+            "contract": {
+              "schema_name": "ChangeRequestCheckReport",
+              "json_schema": {
+                "$defs": {
+                  "BranchReference": {
+                    "additionalProperties": false,
+                    "description": "Identify one named branch at an exact observed repository revision.\n\nThis immutable fact is returned by a future Source Control adapter after it has\nobserved a configured repository. It does not select a naming convention, create a\nworktree, or guarantee that the branch remains unchanged after observation.",
+                    "properties": {
+                      "repository": {
+                        "maxLength": 1000,
+                        "minLength": 1,
+                        "title": "Repository",
+                        "type": "string"
+                      },
+                      "name": {
+                        "maxLength": 500,
+                        "minLength": 1,
+                        "title": "Name",
+                        "type": "string"
+                      },
+                      "workflow_run_id": {
+                        "$ref": "#/$defs/WorkflowRunId"
+                      },
+                      "base_revision": {
+                        "maxLength": 500,
+                        "minLength": 1,
+                        "title": "Base Revision",
+                        "type": "string"
+                      },
+                      "revision": {
+                        "maxLength": 500,
+                        "minLength": 1,
+                        "title": "Revision",
+                        "type": "string"
+                      }
+                    },
+                    "required": [
+                      "repository",
+                      "name",
+                      "workflow_run_id",
+                      "base_revision",
+                      "revision"
+                    ],
+                    "title": "BranchReference",
+                    "type": "object"
+                  },
+                  "ChangeRequestCheck": {
+                    "additionalProperties": false,
+                    "description": "Represent one observed provider check without promoting it to assurance evidence.",
+                    "properties": {
+                      "external_id": {
+                        "maxLength": 500,
+                        "minLength": 1,
+                        "title": "External Id",
+                        "type": "string"
+                      },
+                      "reference": {
+                        "$ref": "#/$defs/ChangeRequestReference"
+                      },
+                      "name": {
+                        "maxLength": 500,
+                        "minLength": 1,
+                        "title": "Name",
+                        "type": "string"
+                      },
+                      "state": {
+                        "$ref": "#/$defs/ChangeRequestCheckState"
+                      },
+                      "head_revision": {
+                        "maxLength": 500,
+                        "minLength": 1,
+                        "title": "Head Revision",
+                        "type": "string"
+                      },
+                      "details_url": {
+                        "anyOf": [
+                          {
+                            "maxLength": 4096,
+                            "minLength": 1,
+                            "pattern": "^https?://[^\\s]+$",
+                            "type": "string"
+                          },
+                          {
+                            "type": "null"
+                          }
+                        ],
+                        "default": null,
+                        "title": "Details Url"
+                      },
+                      "started_at": {
+                        "anyOf": [
+                          {
+                            "format": "date-time",
+                            "type": "string"
+                          },
+                          {
+                            "type": "null"
+                          }
+                        ],
+                        "default": null,
+                        "title": "Started At"
+                      },
+                      "completed_at": {
+                        "anyOf": [
+                          {
+                            "format": "date-time",
+                            "type": "string"
+                          },
+                          {
+                            "type": "null"
+                          }
+                        ],
+                        "default": null,
+                        "title": "Completed At"
+                      }
+                    },
+                    "required": [
+                      "external_id",
+                      "reference",
+                      "name",
+                      "state",
+                      "head_revision"
+                    ],
+                    "title": "ChangeRequestCheck",
+                    "type": "object"
+                  },
+                  "ChangeRequestCheckState": {
+                    "description": "Normalize observable CI/check progress without treating it as verification evidence.",
+                    "enum": [
+                      "pending",
+                      "passed",
+                      "failed",
+                      "skipped",
+                      "canceled"
+                    ],
+                    "title": "ChangeRequestCheckState",
+                    "type": "string"
+                  },
+                  "ChangeRequestReference": {
+                    "additionalProperties": false,
+                    "description": "Identify one provider-hosted change request without inferring review or merge state.\n\nThis value links a provider request to its exact source branch and intended target.\nIt does not authenticate the provider, create comments, approve or merge the request,\nor turn provider text into authoritative workflow evidence.",
+                    "properties": {
+                      "provider_name": {
+                        "maxLength": 100,
+                        "minLength": 1,
+                        "title": "Provider Name",
+                        "type": "string"
+                      },
+                      "external_id": {
+                        "maxLength": 500,
+                        "minLength": 1,
+                        "title": "External Id",
+                        "type": "string"
+                      },
+                      "url": {
+                        "maxLength": 4096,
+                        "minLength": 1,
+                        "pattern": "^https?://[^\\s]+$",
+                        "title": "Url",
+                        "type": "string"
+                      },
+                      "source_branch": {
+                        "$ref": "#/$defs/BranchReference"
+                      },
+                      "target_branch": {
+                        "maxLength": 500,
+                        "minLength": 1,
+                        "title": "Target Branch",
+                        "type": "string"
+                      }
+                    },
+                    "required": [
+                      "provider_name",
+                      "external_id",
+                      "url",
+                      "source_branch",
+                      "target_branch"
+                    ],
+                    "title": "ChangeRequestReference",
+                    "type": "object"
+                  },
+                  "WorkflowRunId": {
+                    "additionalProperties": false,
+                    "description": "Identify one durable workflow run.",
+                    "properties": {
+                      "value": {
+                        "maxLength": 200,
+                        "minLength": 3,
+                        "title": "Value",
+                        "type": "string"
+                      }
+                    },
+                    "required": [
+                      "value"
+                    ],
+                    "title": "WorkflowRunId",
+                    "type": "object"
+                  }
+                },
+                "additionalProperties": false,
+                "description": "Retain the exact provider checks a bounded wait observed before it settled.\n\nThe report is the reviewable half of a check wait: it says what was seen, at which\nhead, and never why the wait ended. Keeping it separate from the settled answer lets\na downstream Step consume the observations without also carrying a routing value.",
+                "properties": {
+                  "reference": {
+                    "$ref": "#/$defs/ChangeRequestReference"
+                  },
+                  "head_revision": {
+                    "maxLength": 500,
+                    "minLength": 1,
+                    "title": "Head Revision",
+                    "type": "string"
+                  },
+                  "checks": {
+                    "default": [],
+                    "items": {
+                      "$ref": "#/$defs/ChangeRequestCheck"
+                    },
+                    "title": "Checks",
+                    "type": "array"
+                  }
+                },
+                "required": [
+                  "reference",
+                  "head_revision"
+                ],
+                "title": "ChangeRequestCheckReport",
+                "type": "object"
+              }
+            }
+          },
+          "required": true
+        }
+      ]
+    },
+    {
+      "kind": "human",
+      "step_definition_id": "approve",
+      "name": "Approve the change",
+      "description": "Ask the one person-owed approval, against the Change Request.",
+      "dependencies": [
+        {
+          "step_definition_id": "wait_checks",
+          "mode": "required"
+        }
+      ],
+      "decision": {
+        "decision_id": "approve_change",
+        "timing": "after",
+        "approval_class": "change",
+        "prompt": "The checks have settled on this Change Request. Should it be merged into the target branch?",
+        "subject": {
+          "subject_id": "change_request",
+          "value": {
+            "kind": "upstream_output",
+            "step_definition_id": "open_pr",
+            "output_name": "change_request",
+            "data_schema": {
+              "content_digest": "sha256:1ce096d1ab2266ecc934226b2fa367512dc033821e47d9a12c96ce7ea7939cd5",
+              "contract": {
+                "schema_name": "ChangeRequestReference",
+                "json_schema": {
+                  "$defs": {
+                    "WorkflowRunId": {
+                      "type": "object",
+                      "properties": {
+                        "value": {
+                          "type": "string",
+                          "minLength": 14,
+                          "maxLength": 200,
+                          "pattern": "^workflow_run_(?![\\s\\S]*\\s)[\\s\\S]+$"
+                        }
+                      },
+                      "required": [
+                        "value"
+                      ],
+                      "additionalProperties": false
+                    },
+                    "BranchReference": {
+                      "type": "object",
+                      "properties": {
+                        "repository": {
+                          "type": "string",
+                          "minLength": 1,
+                          "maxLength": 1000,
+                          "pattern": "^(?![\\s\\S]*\\s)[\\s\\S]+$"
+                        },
+                        "name": {
+                          "type": "string",
+                          "minLength": 1,
+                          "maxLength": 500,
+                          "pattern": "^(?![\\s\\S]*\\s)[\\s\\S]+$"
+                        },
+                        "workflow_run_id": {
+                          "$ref": "#/$defs/WorkflowRunId"
+                        },
+                        "base_revision": {
+                          "type": "string",
+                          "minLength": 1,
+                          "maxLength": 500,
+                          "pattern": "^(?![\\s\\S]*\\s)[\\s\\S]+$"
+                        },
+                        "revision": {
+                          "type": "string",
+                          "minLength": 1,
+                          "maxLength": 500,
+                          "pattern": "^(?![\\s\\S]*\\s)[\\s\\S]+$"
+                        }
+                      },
+                      "required": [
+                        "repository",
+                        "name",
+                        "workflow_run_id",
+                        "base_revision",
+                        "revision"
+                      ],
+                      "additionalProperties": false
+                    }
+                  },
+                  "type": "object",
+                  "properties": {
+                    "provider_name": {
+                      "type": "string",
+                      "minLength": 1,
+                      "maxLength": 100,
+                      "pattern": "^(?![\\s\\S]*\\s)[\\s\\S]+$"
+                    },
+                    "external_id": {
+                      "type": "string",
+                      "minLength": 1,
+                      "maxLength": 500,
+                      "pattern": "^(?![\\s\\S]*\\s)[\\s\\S]+$"
+                    },
+                    "url": {
+                      "type": "string",
+                      "minLength": 1,
+                      "maxLength": 4096,
+                      "pattern": "^https?://(?![\\s\\S]*\\s)[\\s\\S]+$"
+                    },
+                    "source_branch": {
+                      "$ref": "#/$defs/BranchReference"
+                    },
+                    "target_branch": {
+                      "type": "string",
+                      "minLength": 1,
+                      "maxLength": 500,
+                      "pattern": "^(?![\\s\\S]*\\s)[\\s\\S]+$"
+                    }
+                  },
+                  "required": [
+                    "provider_name",
+                    "external_id",
+                    "url",
+                    "source_branch",
+                    "target_branch"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "invalidate_when_changed": true
+        },
+        "max_asks": 1
+      }
+    },
+    {
+      "kind": "script",
+      "step_definition_id": "project_number",
+      "name": "Read the Change Request number",
+      "description": "Project the number and head revision the merge needs out of the reference.",
+      "executable": ".flomaster/scripts/project.sh",
+      "runtime": "posix_shell",
+      "dependencies": [
+        {
+          "step_definition_id": "approve",
+          "mode": "required"
+        }
+      ],
+      "arguments": [
+        {
+          "kind": "format",
+          "segments": [
+            {
+              "kind": "literal",
+              "text": "number=change_request.external_id"
+            }
+          ],
+          "data_schema": {
+            "content_digest": "sha256:ship-literal-format",
+            "contract": {
+              "schema_name": "ShipLiteralFormat",
+              "json_schema": {
+                "type": "object",
+                "additionalProperties": false
+              }
+            }
+          }
+        },
+        {
+          "kind": "format",
+          "segments": [
+            {
+              "kind": "literal",
+              "text": "expected_head=change_request.source_branch.revision"
+            }
+          ],
+          "data_schema": {
+            "content_digest": "sha256:ship-literal-format",
+            "contract": {
+              "schema_name": "ShipLiteralFormat",
+              "json_schema": {
+                "type": "object",
+                "additionalProperties": false
+              }
+            }
+          }
+        }
+      ],
+      "inputs": [
+        {
+          "input_name": "change_request",
+          "value": {
+            "kind": "upstream_output",
+            "step_definition_id": "open_pr",
+            "output_name": "change_request",
+            "data_schema": {
+              "content_digest": "sha256:1ce096d1ab2266ecc934226b2fa367512dc033821e47d9a12c96ce7ea7939cd5",
+              "contract": {
+                "schema_name": "ChangeRequestReference",
+                "json_schema": {
+                  "$defs": {
+                    "WorkflowRunId": {
+                      "type": "object",
+                      "properties": {
+                        "value": {
+                          "type": "string",
+                          "minLength": 14,
+                          "maxLength": 200,
+                          "pattern": "^workflow_run_(?![\\s\\S]*\\s)[\\s\\S]+$"
+                        }
+                      },
+                      "required": [
+                        "value"
+                      ],
+                      "additionalProperties": false
+                    },
+                    "BranchReference": {
+                      "type": "object",
+                      "properties": {
+                        "repository": {
+                          "type": "string",
+                          "minLength": 1,
+                          "maxLength": 1000,
+                          "pattern": "^(?![\\s\\S]*\\s)[\\s\\S]+$"
+                        },
+                        "name": {
+                          "type": "string",
+                          "minLength": 1,
+                          "maxLength": 500,
+                          "pattern": "^(?![\\s\\S]*\\s)[\\s\\S]+$"
+                        },
+                        "workflow_run_id": {
+                          "$ref": "#/$defs/WorkflowRunId"
+                        },
+                        "base_revision": {
+                          "type": "string",
+                          "minLength": 1,
+                          "maxLength": 500,
+                          "pattern": "^(?![\\s\\S]*\\s)[\\s\\S]+$"
+                        },
+                        "revision": {
+                          "type": "string",
+                          "minLength": 1,
+                          "maxLength": 500,
+                          "pattern": "^(?![\\s\\S]*\\s)[\\s\\S]+$"
+                        }
+                      },
+                      "required": [
+                        "repository",
+                        "name",
+                        "workflow_run_id",
+                        "base_revision",
+                        "revision"
+                      ],
+                      "additionalProperties": false
+                    }
+                  },
+                  "type": "object",
+                  "properties": {
+                    "provider_name": {
+                      "type": "string",
+                      "minLength": 1,
+                      "maxLength": 100,
+                      "pattern": "^(?![\\s\\S]*\\s)[\\s\\S]+$"
+                    },
+                    "external_id": {
+                      "type": "string",
+                      "minLength": 1,
+                      "maxLength": 500,
+                      "pattern": "^(?![\\s\\S]*\\s)[\\s\\S]+$"
+                    },
+                    "url": {
+                      "type": "string",
+                      "minLength": 1,
+                      "maxLength": 4096,
+                      "pattern": "^https?://(?![\\s\\S]*\\s)[\\s\\S]+$"
+                    },
+                    "source_branch": {
+                      "$ref": "#/$defs/BranchReference"
+                    },
+                    "target_branch": {
+                      "type": "string",
+                      "minLength": 1,
+                      "maxLength": 500,
+                      "pattern": "^(?![\\s\\S]*\\s)[\\s\\S]+$"
+                    }
+                  },
+                  "required": [
+                    "provider_name",
+                    "external_id",
+                    "url",
+                    "source_branch",
+                    "target_branch"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          }
+        }
+      ],
+      "outputs": [
+        {
+          "kind": "value",
+          "output_name": "number",
+          "data_schema": {
+            "content_digest": "sha256:2e970817baa1f2b5a102ccf9cf44f7bd58a74e9825baae53c8fef85c9563ff0a",
+            "contract": {
+              "schema_name": "GitChangeRequestNumber",
+              "json_schema": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 500,
+                "pattern": "^[1-9][0-9]*$"
+              }
+            }
+          },
+          "required": true
+        },
+        {
+          "kind": "value",
+          "output_name": "expected_head",
+          "data_schema": {
+            "content_digest": "sha256:135c7b45130fbf7661af079190c1b4e431cbc15f24fef1f4efccaf5d12dcbbed",
+            "contract": {
+              "schema_name": "GitExpectedHead",
+              "json_schema": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 500,
+                "pattern": "^(?![\\s\\S]*\\s)[\\s\\S]+$"
+              }
+            }
+          },
+          "required": true
+        }
+      ]
+    },
+    {
+      "kind": "source_control",
+      "step_definition_id": "merge",
+      "name": "Merge the Change Request",
+      "description": "Merge the approved Change Request at the revision that was checked.",
+      "action": "merge",
+      "dependencies": [
+        {
+          "step_definition_id": "project_number",
+          "mode": "required"
+        }
+      ],
+      "inputs": [
+        {
+          "input_name": "number",
+          "value": {
+            "kind": "upstream_output",
+            "step_definition_id": "project_number",
+            "output_name": "number",
+            "data_schema": {
+              "content_digest": "sha256:2e970817baa1f2b5a102ccf9cf44f7bd58a74e9825baae53c8fef85c9563ff0a",
+              "contract": {
+                "schema_name": "GitChangeRequestNumber",
+                "json_schema": {
+                  "type": "string",
+                  "minLength": 1,
+                  "maxLength": 500,
+                  "pattern": "^[1-9][0-9]*$"
+                }
+              }
+            }
+          }
+        },
+        {
+          "input_name": "expected_head",
+          "value": {
+            "kind": "upstream_output",
+            "step_definition_id": "project_number",
+            "output_name": "expected_head",
+            "data_schema": {
+              "content_digest": "sha256:135c7b45130fbf7661af079190c1b4e431cbc15f24fef1f4efccaf5d12dcbbed",
+              "contract": {
+                "schema_name": "GitExpectedHead",
+                "json_schema": {
+                  "type": "string",
+                  "minLength": 1,
+                  "maxLength": 500,
+                  "pattern": "^(?![\\s\\S]*\\s)[\\s\\S]+$"
+                }
+              }
+            }
+          }
+        }
+      ],
+      "outputs": [
+        {
+          "kind": "value",
+          "output_name": "merged",
+          "data_schema": {
+            "content_digest": "sha256:9e08c674c53a8f448dc487a6767f14ac47e9b9f0f11b18bb404f0b2096ce01b1",
+            "contract": {
+              "schema_name": "CommitReference",
+              "json_schema": {
+                "additionalProperties": false,
+                "description": "Identify one immutable commit without asserting verification or delivery success.\n\nA future adapter returns this only from an observed provider or Git result. The\nreference does not contain changed files, checks, approval state, or a claim that a\nworkflow can transition because that evidence belongs to separate contracts.",
+                "properties": {
+                  "repository": {
+                    "maxLength": 1000,
+                    "minLength": 1,
+                    "title": "Repository",
+                    "type": "string"
+                  },
+                  "revision": {
+                    "maxLength": 500,
+                    "minLength": 1,
+                    "title": "Revision",
+                    "type": "string"
+                  },
+                  "parent_revision": {
+                    "maxLength": 500,
+                    "minLength": 1,
+                    "title": "Parent Revision",
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "repository",
+                  "revision",
+                  "parent_revision"
+                ],
+                "title": "CommitReference",
+                "type": "object"
+              }
+            }
+          },
+          "required": true
+        }
+      ]
+    }
+  ]
+}

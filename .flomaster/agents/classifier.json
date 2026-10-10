@@ -1,0 +1,57 @@
+{
+  "agent_profile_id": "agent_profile_intake_classifier",
+  "version": "1",
+  "agent_id": {
+    "value": "agent_intake_classifier"
+  },
+  "name": "Intake Classifier",
+  "responsibility": "Name the kind of work one Work Item asks for and restate its request, or say it is too unclear to classify.",
+  "profile": {
+    "profile_id": "intake_classifier",
+    "version": "1",
+    "runtime_id": "claude_agent_sdk",
+    "allowed_model_ids": [
+      "claude-haiku-5-5"
+    ],
+    "preferred_model_id": "claude-haiku-5-5",
+    "max_turns": 2,
+    "max_output_tokens": 2048,
+    "max_cost_usd": 1.0
+  },
+  "prompt": {
+    "definition_id": "classify_prompt",
+    "version": "1"
+  },
+  "operation_grants": [],
+  "sdk_tool_ids": [],
+  "skill_ids": [],
+  "result_schema": {
+    "content_digest": "sha256:intake-classification-envelope",
+    "contract": {
+      "schema_name": "IntakeClassification",
+      "json_schema": {
+        "type": "object",
+        "properties": {
+          "work_kind": {
+            "type": "string",
+            "enum": [
+              "bug",
+              "feature",
+              "chore",
+              "needs_clarification"
+            ]
+          },
+          "request": {
+            "type": "string",
+            "maxLength": 400
+          }
+        },
+        "required": [
+          "work_kind",
+          "request"
+        ],
+        "additionalProperties": false
+      }
+    }
+  }
+}

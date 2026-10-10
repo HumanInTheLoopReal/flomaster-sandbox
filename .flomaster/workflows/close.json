@@ -1,0 +1,1089 @@
+{
+  "workflow_definition_id": {
+    "value": "workflow_close"
+  },
+  "version": "1",
+  "name": "Close",
+  "description": "Walk the admitted Work Item from merged to its closing state and say on the ticket what closed it.",
+  "visibility": "public",
+  "steps": [
+    {
+      "step_definition_id": "record_merge",
+      "name": "Record that the change merged",
+      "description": "Move the admitted Work Item to the state that says its change is in, so the closing note is written from a ticket that already carries that fact.",
+      "inputs": [
+        {
+          "input_name": "id",
+          "value": {
+            "kind": "work_item",
+            "field": "reference",
+            "data_schema": {
+              "content_digest": "sha256:8964c31cef243ee9c4419f51e52a90efb43965f49dd8971905df8f1a955ddf0b",
+              "contract": {
+                "schema_name": "WorkItemReference",
+                "json_schema": {
+                  "type": "object",
+                  "properties": {
+                    "provider_name": {
+                      "type": "string",
+                      "minLength": 1,
+                      "maxLength": 100
+                    },
+                    "external_id": {
+                      "type": "string",
+                      "minLength": 1,
+                      "maxLength": 500
+                    },
+                    "url": {
+                      "anyOf": [
+                        {
+                          "type": "string",
+                          "minLength": 1,
+                          "maxLength": 4096
+                        },
+                        {
+                          "type": "null"
+                        }
+                      ]
+                    }
+                  },
+                  "required": [
+                    "provider_name",
+                    "external_id"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          }
+        },
+        {
+          "input_name": "state",
+          "value": {
+            "kind": "literal",
+            "value": "merged",
+            "data_schema": {
+              "content_digest": "sha256:969a792f7c16f5a0b1ccf42ee44b1d10198478572371666d4307e6437dff4f5a",
+              "contract": {
+                "schema_name": "TrackerState",
+                "json_schema": {
+                  "type": "string",
+                  "minLength": 1,
+                  "maxLength": 200,
+                  "pattern": "\\S"
+                }
+              }
+            }
+          }
+        },
+        {
+          "input_name": "reason",
+          "value": {
+            "kind": "literal",
+            "value": "The change for this Work Item merged into the target branch.",
+            "data_schema": {
+              "content_digest": "sha256:574bb972a9043f5f048277cca137332e61039b7390202bead2c22ca483701cca",
+              "contract": {
+                "schema_name": "TrackerTransitionReason",
+                "json_schema": {
+                  "type": "string",
+                  "minLength": 1,
+                  "maxLength": 100000
+                }
+              }
+            }
+          }
+        }
+      ],
+      "outputs": [
+        {
+          "kind": "value",
+          "output_name": "work_item",
+          "data_schema": {
+            "content_digest": "sha256:4bd535a4de2f251d69b3e2acf87e254c6a47e8fddf4c3b55157b1ffb2e8f9f5e",
+            "contract": {
+              "schema_name": "WorkItem",
+              "json_schema": {
+                "$defs": {
+                  "WorkItemId": {
+                    "additionalProperties": false,
+                    "description": "Identify one provider-neutral work item.",
+                    "properties": {
+                      "value": {
+                        "maxLength": 200,
+                        "minLength": 3,
+                        "title": "Value",
+                        "type": "string"
+                      }
+                    },
+                    "required": [
+                      "value"
+                    ],
+                    "title": "WorkItemId",
+                    "type": "object"
+                  },
+                  "WorkItemReference": {
+                    "additionalProperties": false,
+                    "description": "Identify one provider object without embedding provider SDK data or credentials.\n\nThis is a domain value observed by intake and writeback ports. Its provider name and\nexternal key are stable correlation facts; it does not prove that the remote item\ncurrently exists or that the URL was fetched.",
+                    "properties": {
+                      "provider_name": {
+                        "maxLength": 100,
+                        "minLength": 1,
+                        "title": "Provider Name",
+                        "type": "string"
+                      },
+                      "external_id": {
+                        "maxLength": 500,
+                        "minLength": 1,
+                        "title": "External Id",
+                        "type": "string"
+                      },
+                      "url": {
+                        "anyOf": [
+                          {
+                            "maxLength": 4096,
+                            "minLength": 1,
+                            "type": "string"
+                          },
+                          {
+                            "type": "null"
+                          }
+                        ],
+                        "default": null,
+                        "title": "Url"
+                      }
+                    },
+                    "required": [
+                      "provider_name",
+                      "external_id"
+                    ],
+                    "title": "WorkItemReference",
+                    "type": "object"
+                  }
+                },
+                "additionalProperties": false,
+                "description": "Capture the latest normalized provider facts relevant to workflow intake.\n\nA source adapter replaces this immutable snapshot after loading it. The model owns\nno routing decision, provider status mapping, or claim side effect. Application\nservices decide whether an item is claimable from the explicit revision, assignment,\nplanning, and relationship facts below; adapters do not hide that policy in a\nprovider-specific claim convention.",
+                "properties": {
+                  "work_item_id": {
+                    "$ref": "#/$defs/WorkItemId"
+                  },
+                  "reference": {
+                    "$ref": "#/$defs/WorkItemReference"
+                  },
+                  "title": {
+                    "maxLength": 1000,
+                    "minLength": 1,
+                    "title": "Title",
+                    "type": "string"
+                  },
+                  "body": {
+                    "default": "",
+                    "maxLength": 100000,
+                    "title": "Body",
+                    "type": "string"
+                  },
+                  "state": {
+                    "maxLength": 200,
+                    "minLength": 1,
+                    "title": "State",
+                    "type": "string"
+                  },
+                  "labels": {
+                    "default": [],
+                    "items": {
+                      "type": "string"
+                    },
+                    "title": "Labels",
+                    "type": "array"
+                  },
+                  "repository_reference": {
+                    "anyOf": [
+                      {
+                        "maxLength": 1000,
+                        "minLength": 1,
+                        "type": "string"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ],
+                    "default": null,
+                    "title": "Repository Reference"
+                  },
+                  "provider_revision": {
+                    "maxLength": 500,
+                    "minLength": 1,
+                    "title": "Provider Revision",
+                    "type": "string"
+                  },
+                  "assignees": {
+                    "default": [],
+                    "items": {
+                      "type": "string"
+                    },
+                    "title": "Assignees",
+                    "type": "array"
+                  },
+                  "parent": {
+                    "anyOf": [
+                      {
+                        "$ref": "#/$defs/WorkItemReference"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ],
+                    "default": null
+                  },
+                  "blocked_by": {
+                    "default": [],
+                    "items": {
+                      "$ref": "#/$defs/WorkItemReference"
+                    },
+                    "title": "Blocked By",
+                    "type": "array"
+                  },
+                  "blocking": {
+                    "default": [],
+                    "items": {
+                      "$ref": "#/$defs/WorkItemReference"
+                    },
+                    "title": "Blocking",
+                    "type": "array"
+                  },
+                  "priority": {
+                    "anyOf": [
+                      {
+                        "maxLength": 100,
+                        "minLength": 1,
+                        "type": "string"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ],
+                    "default": null,
+                    "title": "Priority"
+                  },
+                  "timebox": {
+                    "anyOf": [
+                      {
+                        "maxLength": 200,
+                        "minLength": 1,
+                        "type": "string"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ],
+                    "default": null,
+                    "title": "Timebox"
+                  },
+                  "project": {
+                    "anyOf": [
+                      {
+                        "maxLength": 500,
+                        "minLength": 1,
+                        "type": "string"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ],
+                    "default": null,
+                    "title": "Project"
+                  },
+                  "estimate_points": {
+                    "anyOf": [
+                      {
+                        "maximum": 8,
+                        "minimum": 0,
+                        "type": "integer"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ],
+                    "default": null,
+                    "title": "Estimate Points"
+                  },
+                  "updated_at": {
+                    "format": "date-time",
+                    "title": "Updated At",
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "work_item_id",
+                  "reference",
+                  "title",
+                  "state",
+                  "provider_revision",
+                  "updated_at"
+                ],
+                "title": "WorkItem",
+                "type": "object"
+              }
+            }
+          },
+          "required": true
+        }
+      ],
+      "failure_policy": {
+        "behavior": "halt"
+      },
+      "kind": "work_item_tracker",
+      "action": "transition"
+    },
+    {
+      "step_definition_id": "summarize",
+      "name": "Write the closing note",
+      "description": "Read the Work Item as it stands after the merge was recorded, then return the state it closes in and the note a reader gets instead of the run.",
+      "dependencies": [
+        {
+          "step_definition_id": "record_merge",
+          "mode": "required"
+        }
+      ],
+      "inputs": [
+        {
+          "input_name": "work_item",
+          "value": {
+            "kind": "upstream_output",
+            "step_definition_id": "record_merge",
+            "output_name": "work_item",
+            "data_schema": {
+              "content_digest": "sha256:4bd535a4de2f251d69b3e2acf87e254c6a47e8fddf4c3b55157b1ffb2e8f9f5e",
+              "contract": {
+                "schema_name": "WorkItem",
+                "json_schema": {
+                  "$defs": {
+                    "WorkItemId": {
+                      "additionalProperties": false,
+                      "description": "Identify one provider-neutral work item.",
+                      "properties": {
+                        "value": {
+                          "maxLength": 200,
+                          "minLength": 3,
+                          "title": "Value",
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "value"
+                      ],
+                      "title": "WorkItemId",
+                      "type": "object"
+                    },
+                    "WorkItemReference": {
+                      "additionalProperties": false,
+                      "description": "Identify one provider object without embedding provider SDK data or credentials.\n\nThis is a domain value observed by intake and writeback ports. Its provider name and\nexternal key are stable correlation facts; it does not prove that the remote item\ncurrently exists or that the URL was fetched.",
+                      "properties": {
+                        "provider_name": {
+                          "maxLength": 100,
+                          "minLength": 1,
+                          "title": "Provider Name",
+                          "type": "string"
+                        },
+                        "external_id": {
+                          "maxLength": 500,
+                          "minLength": 1,
+                          "title": "External Id",
+                          "type": "string"
+                        },
+                        "url": {
+                          "anyOf": [
+                            {
+                              "maxLength": 4096,
+                              "minLength": 1,
+                              "type": "string"
+                            },
+                            {
+                              "type": "null"
+                            }
+                          ],
+                          "default": null,
+                          "title": "Url"
+                        }
+                      },
+                      "required": [
+                        "provider_name",
+                        "external_id"
+                      ],
+                      "title": "WorkItemReference",
+                      "type": "object"
+                    }
+                  },
+                  "additionalProperties": false,
+                  "description": "Capture the latest normalized provider facts relevant to workflow intake.\n\nA source adapter replaces this immutable snapshot after loading it. The model owns\nno routing decision, provider status mapping, or claim side effect. Application\nservices decide whether an item is claimable from the explicit revision, assignment,\nplanning, and relationship facts below; adapters do not hide that policy in a\nprovider-specific claim convention.",
+                  "properties": {
+                    "work_item_id": {
+                      "$ref": "#/$defs/WorkItemId"
+                    },
+                    "reference": {
+                      "$ref": "#/$defs/WorkItemReference"
+                    },
+                    "title": {
+                      "maxLength": 1000,
+                      "minLength": 1,
+                      "title": "Title",
+                      "type": "string"
+                    },
+                    "body": {
+                      "default": "",
+                      "maxLength": 100000,
+                      "title": "Body",
+                      "type": "string"
+                    },
+                    "state": {
+                      "maxLength": 200,
+                      "minLength": 1,
+                      "title": "State",
+                      "type": "string"
+                    },
+                    "labels": {
+                      "default": [],
+                      "items": {
+                        "type": "string"
+                      },
+                      "title": "Labels",
+                      "type": "array"
+                    },
+                    "repository_reference": {
+                      "anyOf": [
+                        {
+                          "maxLength": 1000,
+                          "minLength": 1,
+                          "type": "string"
+                        },
+                        {
+                          "type": "null"
+                        }
+                      ],
+                      "default": null,
+                      "title": "Repository Reference"
+                    },
+                    "provider_revision": {
+                      "maxLength": 500,
+                      "minLength": 1,
+                      "title": "Provider Revision",
+                      "type": "string"
+                    },
+                    "assignees": {
+                      "default": [],
+                      "items": {
+                        "type": "string"
+                      },
+                      "title": "Assignees",
+                      "type": "array"
+                    },
+                    "parent": {
+                      "anyOf": [
+                        {
+                          "$ref": "#/$defs/WorkItemReference"
+                        },
+                        {
+                          "type": "null"
+                        }
+                      ],
+                      "default": null
+                    },
+                    "blocked_by": {
+                      "default": [],
+                      "items": {
+                        "$ref": "#/$defs/WorkItemReference"
+                      },
+                      "title": "Blocked By",
+                      "type": "array"
+                    },
+                    "blocking": {
+                      "default": [],
+                      "items": {
+                        "$ref": "#/$defs/WorkItemReference"
+                      },
+                      "title": "Blocking",
+                      "type": "array"
+                    },
+                    "priority": {
+                      "anyOf": [
+                        {
+                          "maxLength": 100,
+                          "minLength": 1,
+                          "type": "string"
+                        },
+                        {
+                          "type": "null"
+                        }
+                      ],
+                      "default": null,
+                      "title": "Priority"
+                    },
+                    "timebox": {
+                      "anyOf": [
+                        {
+                          "maxLength": 200,
+                          "minLength": 1,
+                          "type": "string"
+                        },
+                        {
+                          "type": "null"
+                        }
+                      ],
+                      "default": null,
+                      "title": "Timebox"
+                    },
+                    "project": {
+                      "anyOf": [
+                        {
+                          "maxLength": 500,
+                          "minLength": 1,
+                          "type": "string"
+                        },
+                        {
+                          "type": "null"
+                        }
+                      ],
+                      "default": null,
+                      "title": "Project"
+                    },
+                    "estimate_points": {
+                      "anyOf": [
+                        {
+                          "maximum": 8,
+                          "minimum": 0,
+                          "type": "integer"
+                        },
+                        {
+                          "type": "null"
+                        }
+                      ],
+                      "default": null,
+                      "title": "Estimate Points"
+                    },
+                    "updated_at": {
+                      "format": "date-time",
+                      "title": "Updated At",
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "work_item_id",
+                    "reference",
+                    "title",
+                    "state",
+                    "provider_revision",
+                    "updated_at"
+                  ],
+                  "title": "WorkItem",
+                  "type": "object"
+                }
+              }
+            }
+          }
+        }
+      ],
+      "outputs": [
+        {
+          "kind": "value",
+          "output_name": "state",
+          "data_schema": {
+            "content_digest": "sha256:969a792f7c16f5a0b1ccf42ee44b1d10198478572371666d4307e6437dff4f5a",
+            "contract": {
+              "schema_name": "TrackerState",
+              "json_schema": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 200,
+                "pattern": "\\S"
+              }
+            }
+          },
+          "required": true
+        },
+        {
+          "kind": "value",
+          "output_name": "note",
+          "data_schema": {
+            "content_digest": "sha256:574bb972a9043f5f048277cca137332e61039b7390202bead2c22ca483701cca",
+            "contract": {
+              "schema_name": "TrackerCommentNote",
+              "json_schema": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 100000
+              }
+            }
+          },
+          "required": true
+        }
+      ],
+      "failure_policy": {
+        "behavior": "halt"
+      },
+      "kind": "agent",
+      "agent": {
+        "agent_profile_id": "agent_profile_close_reporter",
+        "version": "1"
+      },
+      "runtime": {
+        "runtime_id": "claude_agent_sdk",
+        "budget": {
+          "max_cost_usd": 0.5,
+          "max_turns": 2
+        },
+        "context_token_budget": 4000
+      }
+    },
+    {
+      "step_definition_id": "close_ticket",
+      "name": "Close the ticket",
+      "description": "Move the same Work Item to the closing state the reporter returned, so the ticket ends where this phase says it ended.",
+      "dependencies": [
+        {
+          "step_definition_id": "summarize",
+          "mode": "required"
+        }
+      ],
+      "inputs": [
+        {
+          "input_name": "id",
+          "value": {
+            "kind": "work_item",
+            "field": "reference",
+            "data_schema": {
+              "content_digest": "sha256:8964c31cef243ee9c4419f51e52a90efb43965f49dd8971905df8f1a955ddf0b",
+              "contract": {
+                "schema_name": "WorkItemReference",
+                "json_schema": {
+                  "type": "object",
+                  "properties": {
+                    "provider_name": {
+                      "type": "string",
+                      "minLength": 1,
+                      "maxLength": 100
+                    },
+                    "external_id": {
+                      "type": "string",
+                      "minLength": 1,
+                      "maxLength": 500
+                    },
+                    "url": {
+                      "anyOf": [
+                        {
+                          "type": "string",
+                          "minLength": 1,
+                          "maxLength": 4096
+                        },
+                        {
+                          "type": "null"
+                        }
+                      ]
+                    }
+                  },
+                  "required": [
+                    "provider_name",
+                    "external_id"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          }
+        },
+        {
+          "input_name": "state",
+          "value": {
+            "kind": "upstream_output",
+            "step_definition_id": "summarize",
+            "output_name": "state",
+            "data_schema": {
+              "content_digest": "sha256:969a792f7c16f5a0b1ccf42ee44b1d10198478572371666d4307e6437dff4f5a",
+              "contract": {
+                "schema_name": "TrackerState",
+                "json_schema": {
+                  "type": "string",
+                  "minLength": 1,
+                  "maxLength": 200,
+                  "pattern": "\\S"
+                }
+              }
+            }
+          }
+        },
+        {
+          "input_name": "reason",
+          "value": {
+            "kind": "literal",
+            "value": "The close phase finished, so the Work Item needs no more work.",
+            "data_schema": {
+              "content_digest": "sha256:574bb972a9043f5f048277cca137332e61039b7390202bead2c22ca483701cca",
+              "contract": {
+                "schema_name": "TrackerTransitionReason",
+                "json_schema": {
+                  "type": "string",
+                  "minLength": 1,
+                  "maxLength": 100000
+                }
+              }
+            }
+          }
+        }
+      ],
+      "outputs": [
+        {
+          "kind": "value",
+          "output_name": "work_item",
+          "data_schema": {
+            "content_digest": "sha256:4bd535a4de2f251d69b3e2acf87e254c6a47e8fddf4c3b55157b1ffb2e8f9f5e",
+            "contract": {
+              "schema_name": "WorkItem",
+              "json_schema": {
+                "$defs": {
+                  "WorkItemId": {
+                    "additionalProperties": false,
+                    "description": "Identify one provider-neutral work item.",
+                    "properties": {
+                      "value": {
+                        "maxLength": 200,
+                        "minLength": 3,
+                        "title": "Value",
+                        "type": "string"
+                      }
+                    },
+                    "required": [
+                      "value"
+                    ],
+                    "title": "WorkItemId",
+                    "type": "object"
+                  },
+                  "WorkItemReference": {
+                    "additionalProperties": false,
+                    "description": "Identify one provider object without embedding provider SDK data or credentials.\n\nThis is a domain value observed by intake and writeback ports. Its provider name and\nexternal key are stable correlation facts; it does not prove that the remote item\ncurrently exists or that the URL was fetched.",
+                    "properties": {
+                      "provider_name": {
+                        "maxLength": 100,
+                        "minLength": 1,
+                        "title": "Provider Name",
+                        "type": "string"
+                      },
+                      "external_id": {
+                        "maxLength": 500,
+                        "minLength": 1,
+                        "title": "External Id",
+                        "type": "string"
+                      },
+                      "url": {
+                        "anyOf": [
+                          {
+                            "maxLength": 4096,
+                            "minLength": 1,
+                            "type": "string"
+                          },
+                          {
+                            "type": "null"
+                          }
+                        ],
+                        "default": null,
+                        "title": "Url"
+                      }
+                    },
+                    "required": [
+                      "provider_name",
+                      "external_id"
+                    ],
+                    "title": "WorkItemReference",
+                    "type": "object"
+                  }
+                },
+                "additionalProperties": false,
+                "description": "Capture the latest normalized provider facts relevant to workflow intake.\n\nA source adapter replaces this immutable snapshot after loading it. The model owns\nno routing decision, provider status mapping, or claim side effect. Application\nservices decide whether an item is claimable from the explicit revision, assignment,\nplanning, and relationship facts below; adapters do not hide that policy in a\nprovider-specific claim convention.",
+                "properties": {
+                  "work_item_id": {
+                    "$ref": "#/$defs/WorkItemId"
+                  },
+                  "reference": {
+                    "$ref": "#/$defs/WorkItemReference"
+                  },
+                  "title": {
+                    "maxLength": 1000,
+                    "minLength": 1,
+                    "title": "Title",
+                    "type": "string"
+                  },
+                  "body": {
+                    "default": "",
+                    "maxLength": 100000,
+                    "title": "Body",
+                    "type": "string"
+                  },
+                  "state": {
+                    "maxLength": 200,
+                    "minLength": 1,
+                    "title": "State",
+                    "type": "string"
+                  },
+                  "labels": {
+                    "default": [],
+                    "items": {
+                      "type": "string"
+                    },
+                    "title": "Labels",
+                    "type": "array"
+                  },
+                  "repository_reference": {
+                    "anyOf": [
+                      {
+                        "maxLength": 1000,
+                        "minLength": 1,
+                        "type": "string"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ],
+                    "default": null,
+                    "title": "Repository Reference"
+                  },
+                  "provider_revision": {
+                    "maxLength": 500,
+                    "minLength": 1,
+                    "title": "Provider Revision",
+                    "type": "string"
+                  },
+                  "assignees": {
+                    "default": [],
+                    "items": {
+                      "type": "string"
+                    },
+                    "title": "Assignees",
+                    "type": "array"
+                  },
+                  "parent": {
+                    "anyOf": [
+                      {
+                        "$ref": "#/$defs/WorkItemReference"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ],
+                    "default": null
+                  },
+                  "blocked_by": {
+                    "default": [],
+                    "items": {
+                      "$ref": "#/$defs/WorkItemReference"
+                    },
+                    "title": "Blocked By",
+                    "type": "array"
+                  },
+                  "blocking": {
+                    "default": [],
+                    "items": {
+                      "$ref": "#/$defs/WorkItemReference"
+                    },
+                    "title": "Blocking",
+                    "type": "array"
+                  },
+                  "priority": {
+                    "anyOf": [
+                      {
+                        "maxLength": 100,
+                        "minLength": 1,
+                        "type": "string"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ],
+                    "default": null,
+                    "title": "Priority"
+                  },
+                  "timebox": {
+                    "anyOf": [
+                      {
+                        "maxLength": 200,
+                        "minLength": 1,
+                        "type": "string"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ],
+                    "default": null,
+                    "title": "Timebox"
+                  },
+                  "project": {
+                    "anyOf": [
+                      {
+                        "maxLength": 500,
+                        "minLength": 1,
+                        "type": "string"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ],
+                    "default": null,
+                    "title": "Project"
+                  },
+                  "estimate_points": {
+                    "anyOf": [
+                      {
+                        "maximum": 8,
+                        "minimum": 0,
+                        "type": "integer"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ],
+                    "default": null,
+                    "title": "Estimate Points"
+                  },
+                  "updated_at": {
+                    "format": "date-time",
+                    "title": "Updated At",
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "work_item_id",
+                  "reference",
+                  "title",
+                  "state",
+                  "provider_revision",
+                  "updated_at"
+                ],
+                "title": "WorkItem",
+                "type": "object"
+              }
+            }
+          },
+          "required": true
+        }
+      ],
+      "failure_policy": {
+        "behavior": "halt"
+      },
+      "kind": "work_item_tracker",
+      "action": "transition"
+    },
+    {
+      "step_definition_id": "note",
+      "name": "Comment what closed it",
+      "description": "Post the reporter's note on the Work Item after it is closed, so the comment states a fact about a ticket that is already in its closing state.",
+      "dependencies": [
+        {
+          "step_definition_id": "close_ticket",
+          "mode": "required"
+        }
+      ],
+      "inputs": [
+        {
+          "input_name": "id",
+          "value": {
+            "kind": "work_item",
+            "field": "reference",
+            "data_schema": {
+              "content_digest": "sha256:8964c31cef243ee9c4419f51e52a90efb43965f49dd8971905df8f1a955ddf0b",
+              "contract": {
+                "schema_name": "WorkItemReference",
+                "json_schema": {
+                  "type": "object",
+                  "properties": {
+                    "provider_name": {
+                      "type": "string",
+                      "minLength": 1,
+                      "maxLength": 100
+                    },
+                    "external_id": {
+                      "type": "string",
+                      "minLength": 1,
+                      "maxLength": 500
+                    },
+                    "url": {
+                      "anyOf": [
+                        {
+                          "type": "string",
+                          "minLength": 1,
+                          "maxLength": 4096
+                        },
+                        {
+                          "type": "null"
+                        }
+                      ]
+                    }
+                  },
+                  "required": [
+                    "provider_name",
+                    "external_id"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          }
+        },
+        {
+          "input_name": "note",
+          "value": {
+            "kind": "upstream_output",
+            "step_definition_id": "summarize",
+            "output_name": "note",
+            "data_schema": {
+              "content_digest": "sha256:574bb972a9043f5f048277cca137332e61039b7390202bead2c22ca483701cca",
+              "contract": {
+                "schema_name": "TrackerCommentNote",
+                "json_schema": {
+                  "type": "string",
+                  "minLength": 1,
+                  "maxLength": 100000
+                }
+              }
+            }
+          }
+        }
+      ],
+      "outputs": [
+        {
+          "kind": "value",
+          "output_name": "comment",
+          "data_schema": {
+            "content_digest": "sha256:f106d7d43fcede20b5b385805595db3146abf69e4271340f2d5c49f542cd7a31",
+            "contract": {
+              "schema_name": "TrackerCommentOutput",
+              "json_schema": {
+                "type": "object",
+                "properties": {
+                  "comment_id": {
+                    "anyOf": [
+                      {
+                        "type": "string",
+                        "minLength": 1,
+                        "maxLength": 500
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ]
+                  }
+                },
+                "required": [
+                  "comment_id"
+                ],
+                "additionalProperties": false
+              }
+            }
+          },
+          "required": true
+        }
+      ],
+      "failure_policy": {
+        "behavior": "halt"
+      },
+      "kind": "work_item_tracker",
+      "action": "comment"
+    }
+  ]
+}

@@ -1,0 +1,463 @@
+{
+  "workflow_definition_id": {
+    "value": "workflow_document"
+  },
+  "version": "1",
+  "name": "Document",
+  "description": "Decide whether one Work Item owes change notes, write them, and commit them on the Run branch.",
+  "visibility": "public",
+  "steps": [
+    {
+      "kind": "script",
+      "step_definition_id": "detect",
+      "name": "Detect whether notes are owed",
+      "description": "Read the Work Item this Run documents and retain whether its change owes change notes.",
+      "executable": ".flomaster/scripts/detect.sh",
+      "runtime": "posix_shell",
+      "arguments": [],
+      "outputs": [
+        {
+          "kind": "value",
+          "output_name": "decision",
+          "data_schema": {
+            "content_digest": "sha256:document-detect-decision",
+            "contract": {
+              "schema_name": "DocumentDecision",
+              "json_schema": {
+                "type": "object",
+                "properties": {
+                  "needs_documentation": {
+                    "type": "string",
+                    "enum": [
+                      "yes",
+                      "no"
+                    ]
+                  },
+                  "reason": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 400
+                  }
+                },
+                "required": [
+                  "needs_documentation",
+                  "reason"
+                ],
+                "additionalProperties": false
+              }
+            }
+          },
+          "required": true
+        }
+      ],
+      "inputs": [
+        {
+          "input_name": "labels",
+          "value": {
+            "kind": "work_item",
+            "field": "labels",
+            "data_schema": {
+              "content_digest": "sha256:document-work-item-labels",
+              "contract": {
+                "schema_name": "WorkItemLabels",
+                "json_schema": {
+                  "type": "array",
+                  "uniqueItems": true,
+                  "items": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 200
+                  }
+                }
+              }
+            }
+          }
+        }
+      ],
+      "routes": {
+        "on": "decision",
+        "field": "needs_documentation",
+        "branches": [
+          {
+            "outcome": "yes",
+            "target_step_definition_ids": [
+              "write"
+            ]
+          },
+          {
+            "outcome": "no",
+            "target_step_definition_ids": []
+          }
+        ]
+      }
+    },
+    {
+      "kind": "agent",
+      "step_definition_id": "write",
+      "name": "Write the change notes",
+      "description": "Ask the writer Agent for the change notes document and the two facts naming it.",
+      "dependencies": [
+        {
+          "step_definition_id": "detect",
+          "mode": "required"
+        }
+      ],
+      "agent": {
+        "agent_profile_id": "agent_profile_document_writer",
+        "version": "1"
+      },
+      "runtime": {
+        "runtime_id": "claude_agent_sdk",
+        "sdk_tool_ids": [],
+        "skill_ids": [],
+        "budget": {
+          "max_turns": 3,
+          "max_cost_usd": 0.5
+        },
+        "context_token_budget": 8000
+      },
+      "granted_operations": [],
+      "outputs": [
+        {
+          "kind": "value",
+          "output_name": "headline",
+          "data_schema": {
+            "content_digest": "sha256:document-change-notes-headline",
+            "contract": {
+              "schema_name": "ChangeNotesHeadline",
+              "json_schema": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 120
+              }
+            }
+          },
+          "required": true
+        },
+        {
+          "kind": "value",
+          "output_name": "summary",
+          "data_schema": {
+            "content_digest": "sha256:document-change-notes-summary",
+            "contract": {
+              "schema_name": "ChangeNotesSummary",
+              "json_schema": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 400
+              }
+            }
+          },
+          "required": true
+        },
+        {
+          "kind": "value",
+          "output_name": "body",
+          "data_schema": {
+            "content_digest": "sha256:document-change-notes-body",
+            "contract": {
+              "schema_name": "ChangeNotesBody",
+              "json_schema": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 4000
+              }
+            }
+          },
+          "required": true
+        }
+      ]
+    },
+    {
+      "kind": "script",
+      "step_definition_id": "render",
+      "name": "Put the change notes in the Workspace",
+      "description": "Write the document the Agent authored to the one path this phase commits.",
+      "dependencies": [
+        {
+          "step_definition_id": "write",
+          "mode": "required"
+        }
+      ],
+      "executable": ".flomaster/scripts/render.sh",
+      "runtime": "posix_shell",
+      "arguments": [],
+      "inputs": [
+        {
+          "input_name": "body",
+          "value": {
+            "kind": "upstream_output",
+            "step_definition_id": "write",
+            "output_name": "body",
+            "data_schema": {
+              "content_digest": "sha256:document-change-notes-body",
+              "contract": {
+                "schema_name": "ChangeNotesBody",
+                "json_schema": {
+                  "type": "string",
+                  "minLength": 1,
+                  "maxLength": 4000
+                }
+              }
+            }
+          }
+        }
+      ],
+      "outputs": [
+        {
+          "kind": "file",
+          "output_name": "document",
+          "path": {
+            "kind": "format",
+            "segments": [
+              {
+                "kind": "literal",
+                "text": "docs/change-notes.md"
+              }
+            ],
+            "data_schema": {
+              "content_digest": "sha256:document-change-notes-path",
+              "contract": {
+                "schema_name": "ChangeNotesPath",
+                "json_schema": {
+                  "type": "object",
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "artifact_kind": "documentation",
+          "required": true,
+          "max_bytes": 65536
+        }
+      ]
+    },
+    {
+      "kind": "source_control",
+      "step_definition_id": "stage",
+      "name": "Stage the change notes",
+      "description": "Stage only the one retained document path through the fixed built-in Operation.",
+      "dependencies": [
+        {
+          "step_definition_id": "render",
+          "mode": "required"
+        }
+      ],
+      "action": "stage",
+      "inputs": [
+        {
+          "input_name": "paths",
+          "value": {
+            "kind": "literal",
+            "value": [
+              "docs/change-notes.md"
+            ],
+            "data_schema": {
+              "content_digest": "sha256:baf3f14c5ff42d64c507d09861ae5a99da2e9a79a9da03be3375389a8bc86599",
+              "contract": {
+                "schema_name": "GitStagePaths",
+                "json_schema": {
+                  "type": "array",
+                  "minItems": 1,
+                  "uniqueItems": true,
+                  "items": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 4096
+                  }
+                }
+              }
+            }
+          }
+        }
+      ],
+      "outputs": [
+        {
+          "kind": "value",
+          "output_name": "staged",
+          "data_schema": {
+            "content_digest": "sha256:c3075360354e1924c45f18e9f4b137927d6377d64f4802486b60695647224b46",
+            "contract": {
+              "schema_name": "GitStageResult",
+              "json_schema": {
+                "type": "object",
+                "properties": {
+                  "paths": {
+                    "type": "array",
+                    "minItems": 1,
+                    "uniqueItems": true,
+                    "items": {
+                      "type": "string",
+                      "minLength": 1,
+                      "maxLength": 4096
+                    }
+                  },
+                  "head_revision": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 500,
+                    "pattern": "^(?![\\s\\S]*\\s)[\\s\\S]+$"
+                  }
+                },
+                "required": [
+                  "paths",
+                  "head_revision"
+                ],
+                "additionalProperties": false
+              }
+            }
+          },
+          "required": true
+        }
+      ]
+    },
+    {
+      "kind": "source_control",
+      "step_definition_id": "commit",
+      "name": "Commit the change notes",
+      "description": "Commit the staged document on the Run branch under the headline the writer returned.",
+      "dependencies": [
+        {
+          "step_definition_id": "stage",
+          "mode": "required"
+        }
+      ],
+      "action": "commit",
+      "inputs": [
+        {
+          "input_name": "message",
+          "value": {
+            "kind": "format",
+            "segments": [
+              {
+                "kind": "literal",
+                "text": "docs: "
+              },
+              {
+                "kind": "reference",
+                "reference": {
+                  "kind": "upstream_output",
+                  "step_definition_id": "write",
+                  "output_name": "headline",
+                  "data_schema": {
+                    "content_digest": "sha256:document-change-notes-headline",
+                    "contract": {
+                      "schema_name": "ChangeNotesHeadline",
+                      "json_schema": {
+                        "type": "string",
+                        "minLength": 1,
+                        "maxLength": 120
+                      }
+                    }
+                  }
+                }
+              }
+            ],
+            "max_length": 200,
+            "data_schema": {
+              "content_digest": "sha256:b04c2f8290f8b647886aa181f31723ef07c3a61f708e5584efcf5fe2d456470a",
+              "contract": {
+                "schema_name": "GitCommitMessage",
+                "json_schema": {
+                  "type": "string",
+                  "minLength": 1,
+                  "maxLength": 100000,
+                  "pattern": "\\S"
+                }
+              }
+            }
+          }
+        }
+      ],
+      "outputs": [
+        {
+          "kind": "value",
+          "output_name": "commit",
+          "data_schema": {
+            "content_digest": "sha256:075cd535dc545111b773aaf43d273e4d97d42daf4327b22f3baf7f7796dedce7",
+            "contract": {
+              "schema_name": "GitCommitResult",
+              "json_schema": {
+                "$defs": {
+                  "CommitReference": {
+                    "type": "object",
+                    "properties": {
+                      "repository": {
+                        "type": "string",
+                        "minLength": 1,
+                        "maxLength": 1000,
+                        "pattern": "^(?![\\s\\S]*\\s)[\\s\\S]+$"
+                      },
+                      "revision": {
+                        "type": "string",
+                        "minLength": 1,
+                        "maxLength": 500,
+                        "pattern": "^(?![\\s\\S]*\\s)[\\s\\S]+$"
+                      },
+                      "parent_revision": {
+                        "type": "string",
+                        "minLength": 1,
+                        "maxLength": 500,
+                        "pattern": "^(?![\\s\\S]*\\s)[\\s\\S]+$"
+                      }
+                    },
+                    "required": [
+                      "repository",
+                      "revision",
+                      "parent_revision"
+                    ],
+                    "additionalProperties": false
+                  }
+                },
+                "type": "object",
+                "properties": {
+                  "commit": {
+                    "anyOf": [
+                      {
+                        "$ref": "#/$defs/CommitReference"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ]
+                  },
+                  "clean": {
+                    "type": "boolean"
+                  }
+                },
+                "required": [
+                  "commit",
+                  "clean"
+                ],
+                "additionalProperties": false,
+                "oneOf": [
+                  {
+                    "properties": {
+                      "commit": {
+                        "$ref": "#/$defs/CommitReference"
+                      },
+                      "clean": {
+                        "const": false
+                      }
+                    }
+                  },
+                  {
+                    "properties": {
+                      "commit": {
+                        "type": "null"
+                      },
+                      "clean": {
+                        "const": true
+                      }
+                    }
+                  }
+                ]
+              }
+            }
+          },
+          "required": true
+        }
+      ]
+    }
+  ]
+}

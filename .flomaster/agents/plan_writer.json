@@ -1,0 +1,57 @@
+{
+  "agent_profile_id": "agent_profile_plan_writer",
+  "version": "1",
+  "agent_id": {
+    "value": "agent_plan_writer"
+  },
+  "name": "Plan Writer",
+  "responsibility": "Return one plan for a Work Item, as a summary and ordered steps, without carrying the work out.",
+  "profile": {
+    "profile_id": "plan_writer",
+    "version": "1",
+    "runtime_id": "claude_agent_sdk",
+    "allowed_model_ids": [
+      "claude-haiku-5-5"
+    ],
+    "preferred_model_id": "claude-haiku-5-5",
+    "max_turns": 4,
+    "max_output_tokens": 4096,
+    "max_cost_usd": 1.0
+  },
+  "prompt": {
+    "definition_id": "write_plan_prompt",
+    "version": "1"
+  },
+  "operation_grants": [],
+  "sdk_tool_ids": [],
+  "skill_ids": [],
+  "result_schema": {
+    "content_digest": "sha256:plan-writer-envelope",
+    "contract": {
+      "schema_name": "WrittenPlan",
+      "json_schema": {
+        "type": "object",
+        "properties": {
+          "summary": {
+            "type": "string",
+            "maxLength": 400
+          },
+          "steps": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "maxLength": 300
+            },
+            "minItems": 1,
+            "maxItems": 8
+          }
+        },
+        "required": [
+          "summary",
+          "steps"
+        ],
+        "additionalProperties": false
+      }
+    }
+  }
+}

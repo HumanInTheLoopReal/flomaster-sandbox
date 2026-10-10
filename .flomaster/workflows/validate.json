@@ -1,0 +1,267 @@
+{
+  "workflow_definition_id": {
+    "value": "workflow_validate"
+  },
+  "version": "1",
+  "name": "Validate",
+  "description": "Decide how far one change has to be checked, run those checks, and report what they found.",
+  "visibility": "public",
+  "steps": [
+    {
+      "kind": "agent",
+      "step_definition_id": "decide_e2e",
+      "name": "Decide the check scope",
+      "description": "Judge whether this change needs an end-to-end check and retain that decision.",
+      "agent": {
+        "agent_profile_id": "agent_profile_validate_scope_judge",
+        "version": "1"
+      },
+      "runtime": {
+        "runtime_id": "claude_agent_sdk",
+        "sdk_tool_ids": [],
+        "skill_ids": [],
+        "budget": {
+          "max_turns": 2,
+          "max_cost_usd": 0.5
+        },
+        "context_token_budget": 4000
+      },
+      "granted_operations": [],
+      "outputs": [
+        {
+          "kind": "value",
+          "output_name": "needs_e2e",
+          "data_schema": {
+            "content_digest": "sha256:validate-e2e-scope",
+            "contract": {
+              "schema_name": "ValidateEndToEndScope",
+              "json_schema": {
+                "type": "string",
+                "enum": [
+                  "required",
+                  "not_required"
+                ]
+              }
+            }
+          },
+          "required": true
+        },
+        {
+          "kind": "value",
+          "output_name": "reason",
+          "data_schema": {
+            "content_digest": "sha256:validate-e2e-scope-reason",
+            "contract": {
+              "schema_name": "ValidateEndToEndScopeReason",
+              "json_schema": {
+                "type": "string",
+                "minLength": 30,
+                "maxLength": 400
+              }
+            }
+          },
+          "required": true
+        }
+      ]
+    },
+    {
+      "kind": "script",
+      "step_definition_id": "run",
+      "name": "Run the checks",
+      "description": "Run the checks the retained scope selected and retain what each one found.",
+      "dependencies": [
+        {
+          "step_definition_id": "decide_e2e",
+          "mode": "required"
+        }
+      ],
+      "executable": ".flomaster/scripts/run_checks.sh",
+      "runtime": "posix_shell",
+      "arguments": [],
+      "timeout_seconds": 120,
+      "inputs": [
+        {
+          "input_name": "needs_e2e",
+          "value": {
+            "kind": "upstream_output",
+            "step_definition_id": "decide_e2e",
+            "output_name": "needs_e2e",
+            "data_schema": {
+              "content_digest": "sha256:validate-e2e-scope",
+              "contract": {
+                "schema_name": "ValidateEndToEndScope",
+                "json_schema": {
+                  "type": "string",
+                  "enum": [
+                    "required",
+                    "not_required"
+                  ]
+                }
+              }
+            }
+          }
+        }
+      ],
+      "outputs": [
+        {
+          "kind": "value",
+          "output_name": "result",
+          "data_schema": {
+            "content_digest": "sha256:validate-check-result",
+            "contract": {
+              "schema_name": "ValidateCheckResult",
+              "json_schema": {
+                "type": "object",
+                "properties": {
+                  "checks": {
+                    "type": "string",
+                    "maxLength": 600
+                  },
+                  "failures": {
+                    "type": "integer",
+                    "minimum": 0
+                  },
+                  "inconclusive": {
+                    "type": "integer",
+                    "minimum": 0
+                  }
+                },
+                "required": [
+                  "checks",
+                  "failures",
+                  "inconclusive"
+                ],
+                "additionalProperties": false
+              }
+            }
+          },
+          "required": true
+        }
+      ]
+    },
+    {
+      "kind": "agent",
+      "step_definition_id": "summarize",
+      "name": "Report what was checked",
+      "description": "State in plain English what was checked and what it found, and give one verdict.",
+      "dependencies": [
+        {
+          "step_definition_id": "run",
+          "mode": "required"
+        }
+      ],
+      "agent": {
+        "agent_profile_id": "agent_profile_validate_reporter",
+        "version": "1"
+      },
+      "runtime": {
+        "runtime_id": "claude_agent_sdk",
+        "sdk_tool_ids": [],
+        "skill_ids": [],
+        "budget": {
+          "max_turns": 2,
+          "max_cost_usd": 0.5
+        },
+        "context_token_budget": 4000
+      },
+      "granted_operations": [],
+      "inputs": [
+        {
+          "input_name": "needs_e2e",
+          "value": {
+            "kind": "upstream_output",
+            "step_definition_id": "decide_e2e",
+            "output_name": "needs_e2e",
+            "data_schema": {
+              "content_digest": "sha256:validate-e2e-scope",
+              "contract": {
+                "schema_name": "ValidateEndToEndScope",
+                "json_schema": {
+                  "type": "string",
+                  "enum": [
+                    "required",
+                    "not_required"
+                  ]
+                }
+              }
+            }
+          }
+        },
+        {
+          "input_name": "result",
+          "value": {
+            "kind": "upstream_output",
+            "step_definition_id": "run",
+            "output_name": "result",
+            "data_schema": {
+              "content_digest": "sha256:validate-check-result",
+              "contract": {
+                "schema_name": "ValidateCheckResult",
+                "json_schema": {
+                  "type": "object",
+                  "properties": {
+                    "checks": {
+                      "type": "string",
+                      "maxLength": 600
+                    },
+                    "failures": {
+                      "type": "integer",
+                      "minimum": 0
+                    },
+                    "inconclusive": {
+                      "type": "integer",
+                      "minimum": 0
+                    }
+                  },
+                  "required": [
+                    "checks",
+                    "failures",
+                    "inconclusive"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          }
+        }
+      ],
+      "outputs": [
+        {
+          "kind": "value",
+          "output_name": "summary",
+          "data_schema": {
+            "content_digest": "sha256:validate-report-summary",
+            "contract": {
+              "schema_name": "ValidateReportSummary",
+              "json_schema": {
+                "type": "string",
+                "minLength": 40,
+                "maxLength": 600
+              }
+            }
+          },
+          "required": true
+        },
+        {
+          "kind": "value",
+          "output_name": "verdict",
+          "data_schema": {
+            "content_digest": "sha256:validate-report-verdict",
+            "contract": {
+              "schema_name": "ValidateReportVerdict",
+              "json_schema": {
+                "type": "string",
+                "enum": [
+                  "passed",
+                  "failed",
+                  "inconclusive"
+                ]
+              }
+            }
+          },
+          "required": true
+        }
+      ]
+    }
+  ]
+}

@@ -1,0 +1,244 @@
+{
+  "workflow_definition_id": {
+    "value": "workflow_delivery"
+  },
+  "version": "1",
+  "name": "Delivery",
+  "description": "Call the intake phase on one Work Item and take the classification it exports as the lane decision.",
+  "visibility": "public",
+  "outputs": [
+    {
+      "output_name": "lane",
+      "description": "The classification the delivery Run selected a lane from.",
+      "source": {
+        "kind": "upstream_output",
+        "step_definition_id": "select_lane",
+        "output_name": "classification",
+        "data_schema": {
+          "content_digest": "sha256:intake-classification-record",
+          "contract": {
+            "schema_name": "IntakeClassificationRecord",
+            "json_schema": {
+              "type": "object",
+              "properties": {
+                "work_kind": {
+                  "type": "string",
+                  "enum": [
+                    "bug",
+                    "feature",
+                    "chore"
+                  ]
+                },
+                "request": {
+                  "type": "string",
+                  "maxLength": 400
+                }
+              },
+              "required": [
+                "work_kind",
+                "request"
+              ],
+              "additionalProperties": false
+            }
+          }
+        }
+      },
+      "required": true
+    }
+  ],
+  "steps": [
+    {
+      "kind": "workflow",
+      "step_definition_id": "call_intake",
+      "name": "Classify the Work Item",
+      "description": "Run the intake phase as a child Workflow and await the classification it exports.",
+      "outputs": [
+        {
+          "kind": "value",
+          "output_name": "classification",
+          "data_schema": {
+            "content_digest": "sha256:intake-classification-record",
+            "contract": {
+              "schema_name": "IntakeClassificationRecord",
+              "json_schema": {
+                "type": "object",
+                "properties": {
+                  "work_kind": {
+                    "type": "string",
+                    "enum": [
+                      "bug",
+                      "feature",
+                      "chore"
+                    ]
+                  },
+                  "request": {
+                    "type": "string",
+                    "maxLength": 400
+                  }
+                },
+                "required": [
+                  "work_kind",
+                  "request"
+                ],
+                "additionalProperties": false
+              }
+            }
+          },
+          "required": true
+        }
+      ],
+      "child": {
+        "workflow_definition_id": {
+          "value": "workflow_intake"
+        },
+        "version": "1",
+        "await_completion": true,
+        "workspace": "dedicated",
+        "retention": "release_on_terminal",
+        "inputs": [],
+        "outputs": [
+          {
+            "child_output_name": "classification_record",
+            "parent_output_name": "classification"
+          }
+        ]
+      }
+    },
+    {
+      "kind": "script",
+      "step_definition_id": "select_lane",
+      "name": "Select the delivery lane",
+      "description": "Record the lane the classification selects from what the child Workflow exported. The record path is declared once as the argument the script writes to, and the lane_record output captures that same path.",
+      "dependencies": [
+        {
+          "step_definition_id": "call_intake",
+          "mode": "required"
+        }
+      ],
+      "executable": ".flomaster/scripts/select_lane.sh",
+      "runtime": "posix_shell",
+      "arguments": [
+        {
+          "kind": "format",
+          "segments": [
+            {
+              "kind": "literal",
+              "text": "artifacts/lane.json"
+            }
+          ],
+          "data_schema": {
+            "content_digest": "sha256:delivery-lane-path",
+            "contract": {
+              "schema_name": "DeliveryLanePath",
+              "json_schema": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 500
+              }
+            }
+          }
+        }
+      ],
+      "inputs": [
+        {
+          "input_name": "classification",
+          "value": {
+            "kind": "upstream_output",
+            "step_definition_id": "call_intake",
+            "output_name": "classification",
+            "data_schema": {
+              "content_digest": "sha256:intake-classification-record",
+              "contract": {
+                "schema_name": "IntakeClassificationRecord",
+                "json_schema": {
+                  "type": "object",
+                  "properties": {
+                    "work_kind": {
+                      "type": "string",
+                      "enum": [
+                        "bug",
+                        "feature",
+                        "chore"
+                      ]
+                    },
+                    "request": {
+                      "type": "string",
+                      "maxLength": 400
+                    }
+                  },
+                  "required": [
+                    "work_kind",
+                    "request"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          }
+        }
+      ],
+      "outputs": [
+        {
+          "kind": "value",
+          "output_name": "classification",
+          "data_schema": {
+            "content_digest": "sha256:intake-classification-record",
+            "contract": {
+              "schema_name": "IntakeClassificationRecord",
+              "json_schema": {
+                "type": "object",
+                "properties": {
+                  "work_kind": {
+                    "type": "string",
+                    "enum": [
+                      "bug",
+                      "feature",
+                      "chore"
+                    ]
+                  },
+                  "request": {
+                    "type": "string",
+                    "maxLength": 400
+                  }
+                },
+                "required": [
+                  "work_kind",
+                  "request"
+                ],
+                "additionalProperties": false
+              }
+            }
+          },
+          "required": true
+        },
+        {
+          "kind": "file",
+          "output_name": "lane_record",
+          "path": {
+            "kind": "format",
+            "segments": [
+              {
+                "kind": "literal",
+                "text": "artifacts/lane.json"
+              }
+            ],
+            "data_schema": {
+              "content_digest": "sha256:delivery-lane-path",
+              "contract": {
+                "schema_name": "DeliveryLanePath",
+                "json_schema": {
+                  "type": "string",
+                  "minLength": 1,
+                  "maxLength": 500
+                }
+              }
+            }
+          },
+          "artifact_kind": "change_request",
+          "required": true,
+          "max_bytes": 4096
+        }
+      ]
+    }
+  ]
+}

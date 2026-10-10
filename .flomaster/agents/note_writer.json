@@ -1,0 +1,54 @@
+{
+  "agent_profile_id": "agent_profile_ship_note_writer",
+  "version": "1",
+  "agent_id": {
+    "value": "agent_ship_note_writer"
+  },
+  "name": "Ship Note Author",
+  "responsibility": "Write the text of the note recording what is shipping.",
+  "profile": {
+    "profile_id": "ship_note_writer",
+    "version": "1",
+    "runtime_id": "claude_agent_sdk",
+    "allowed_model_ids": [
+      "claude-haiku-5-5"
+    ],
+    "preferred_model_id": "claude-haiku-5-5",
+    "max_turns": 2,
+    "max_output_tokens": 2048,
+    "max_cost_usd": 1.0
+  },
+  "prompt": {
+    "definition_id": "write_note_prompt",
+    "version": "1"
+  },
+  "operation_grants": [],
+  "sdk_tool_ids": [],
+  "skill_ids": [],
+  "result_schema": {
+    "content_digest": "sha256:ship-note-text",
+    "contract": {
+      "schema_name": "ShipNoteText",
+      "json_schema": {
+        "type": "object",
+        "properties": {
+          "heading": {
+            "type": "string",
+            "minLength": 4,
+            "maxLength": 120
+          },
+          "body": {
+            "type": "string",
+            "minLength": 20,
+            "maxLength": 2000
+          }
+        },
+        "required": [
+          "heading",
+          "body"
+        ],
+        "additionalProperties": false
+      }
+    }
+  }
+}

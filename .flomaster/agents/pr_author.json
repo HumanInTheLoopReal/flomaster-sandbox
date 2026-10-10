@@ -1,0 +1,54 @@
+{
+  "agent_profile_id": "agent_profile_ship_pr_author",
+  "version": "1",
+  "agent_id": {
+    "value": "agent_ship_pr_author"
+  },
+  "name": "Ship Change Request Author",
+  "responsibility": "Write the title and body a reviewer reads on the change.",
+  "profile": {
+    "profile_id": "ship_pr_author",
+    "version": "1",
+    "runtime_id": "claude_agent_sdk",
+    "allowed_model_ids": [
+      "claude-haiku-5-5"
+    ],
+    "preferred_model_id": "claude-haiku-5-5",
+    "max_turns": 2,
+    "max_output_tokens": 2048,
+    "max_cost_usd": 1.0
+  },
+  "prompt": {
+    "definition_id": "pr_text_prompt",
+    "version": "1"
+  },
+  "operation_grants": [],
+  "sdk_tool_ids": [],
+  "skill_ids": [],
+  "result_schema": {
+    "content_digest": "sha256:ship-change-request-text",
+    "contract": {
+      "schema_name": "ShipChangeRequestText",
+      "json_schema": {
+        "type": "object",
+        "properties": {
+          "title": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 10000,
+            "pattern": "\\S"
+          },
+          "body": {
+            "type": "string",
+            "maxLength": 100000
+          }
+        },
+        "required": [
+          "title",
+          "body"
+        ],
+        "additionalProperties": false
+      }
+    }
+  }
+}

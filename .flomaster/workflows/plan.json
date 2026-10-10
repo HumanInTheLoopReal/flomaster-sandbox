@@ -1,0 +1,771 @@
+{
+  "workflow_definition_id": {
+    "value": "workflow_plan"
+  },
+  "version": "1",
+  "name": "Plan",
+  "description": "Plan one Work Item, review the plan, and ask a person to approve it. How much research comes first is a declared input rather than a second Workflow.",
+  "visibility": "public",
+  "inputs": [
+    {
+      "input_name": "depth",
+      "description": "Whether the phase researches the Work Item before planning it, or plans it straight away.",
+      "data_schema": {
+        "content_digest": "sha256:plan-depth",
+        "contract": {
+          "schema_name": "PlanDepth",
+          "json_schema": {
+            "type": "string",
+            "enum": [
+              "shallow",
+              "full"
+            ]
+          }
+        }
+      },
+      "required": true
+    }
+  ],
+  "steps": [
+    {
+      "kind": "script",
+      "step_definition_id": "select_depth",
+      "name": "Select the plan depth",
+      "description": "Publish the declared depth as this Step's own output, which is what the route below selects a preparation Step on.",
+      "executable": ".flomaster/scripts/select_depth.sh",
+      "runtime": "posix_shell",
+      "arguments": [],
+      "inputs": [
+        {
+          "input_name": "depth",
+          "value": {
+            "kind": "workflow_input",
+            "input_name": "depth",
+            "data_schema": {
+              "content_digest": "sha256:plan-depth",
+              "contract": {
+                "schema_name": "PlanDepth",
+                "json_schema": {
+                  "type": "string",
+                  "enum": [
+                    "shallow",
+                    "full"
+                  ]
+                }
+              }
+            }
+          }
+        }
+      ],
+      "outputs": [
+        {
+          "kind": "value",
+          "output_name": "selection",
+          "data_schema": {
+            "content_digest": "sha256:plan-depth-selection",
+            "contract": {
+              "schema_name": "PlanDepthSelection",
+              "json_schema": {
+                "type": "object",
+                "properties": {
+                  "depth": {
+                    "type": "string",
+                    "enum": [
+                      "shallow",
+                      "full"
+                    ]
+                  }
+                },
+                "required": [
+                  "depth"
+                ],
+                "additionalProperties": false
+              }
+            }
+          },
+          "required": true
+        }
+      ],
+      "routes": {
+        "on": "selection",
+        "field": "depth",
+        "branches": [
+          {
+            "outcome": "full",
+            "target_step_definition_ids": [
+              "research"
+            ]
+          },
+          {
+            "outcome": "shallow",
+            "target_step_definition_ids": [
+              "note_shallow_depth"
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "kind": "agent",
+      "step_definition_id": "research",
+      "name": "State what the plan needs to learn",
+      "description": "Read the Work Item and name the open questions a plan would have to answer. The full depth selects this Step and the shallow depth does not.",
+      "dependencies": [
+        {
+          "step_definition_id": "select_depth",
+          "mode": "required"
+        }
+      ],
+      "agent": {
+        "agent_profile_id": "agent_profile_plan_researcher",
+        "version": "1"
+      },
+      "runtime": {
+        "runtime_id": "claude_agent_sdk",
+        "sdk_tool_ids": [],
+        "skill_ids": [],
+        "budget": {
+          "max_turns": 2,
+          "max_cost_usd": 0.5
+        },
+        "context_token_budget": 4000
+      },
+      "granted_operations": [],
+      "outputs": [
+        {
+          "kind": "value",
+          "output_name": "research",
+          "data_schema": {
+            "content_digest": "sha256:plan-research-envelope",
+            "contract": {
+              "schema_name": "PlanResearch",
+              "json_schema": {
+                "type": "object",
+                "properties": {
+                  "questions": {
+                    "type": "array",
+                    "items": {
+                      "type": "string",
+                      "maxLength": 300
+                    },
+                    "minItems": 1,
+                    "maxItems": 5
+                  }
+                },
+                "required": [
+                  "questions"
+                ],
+                "additionalProperties": false
+              }
+            }
+          },
+          "required": true
+        }
+      ]
+    },
+    {
+      "kind": "script",
+      "step_definition_id": "note_shallow_depth",
+      "name": "Plan from the Work Item alone",
+      "description": "Stand in for the research the shallow depth does not do, so one Step is selected either way and the plan that follows runs exactly once.",
+      "dependencies": [
+        {
+          "step_definition_id": "select_depth",
+          "mode": "required"
+        }
+      ],
+      "executable": ".flomaster/scripts/note_shallow_depth.sh",
+      "runtime": "posix_shell",
+      "arguments": []
+    },
+    {
+      "kind": "agent",
+      "step_definition_id": "write_plan",
+      "name": "Write the plan",
+      "description": "Return the plan the Step below retains, as a summary and the ordered steps. It depends ordinarily on both preparation Steps, so it runs once after whichever one the depth selected and is not held back by the one that was skipped.",
+      "dependencies": [
+        {
+          "step_definition_id": "research",
+          "mode": "ordinary"
+        },
+        {
+          "step_definition_id": "note_shallow_depth",
+          "mode": "ordinary"
+        }
+      ],
+      "agent": {
+        "agent_profile_id": "agent_profile_plan_writer",
+        "version": "1"
+      },
+      "runtime": {
+        "runtime_id": "claude_agent_sdk",
+        "sdk_tool_ids": [],
+        "skill_ids": [],
+        "budget": {
+          "max_turns": 4,
+          "max_cost_usd": 0.5
+        },
+        "context_token_budget": 4000
+      },
+      "granted_operations": [],
+      "outputs": [
+        {
+          "kind": "value",
+          "output_name": "summary",
+          "data_schema": {
+            "content_digest": "sha256:plan-summary",
+            "contract": {
+              "schema_name": "PlanSummary",
+              "json_schema": {
+                "type": "string",
+                "maxLength": 400
+              }
+            }
+          },
+          "required": true
+        },
+        {
+          "kind": "value",
+          "output_name": "steps",
+          "data_schema": {
+            "content_digest": "sha256:plan-steps",
+            "contract": {
+              "schema_name": "PlanSteps",
+              "json_schema": {
+                "type": "array",
+                "items": {
+                  "type": "string",
+                  "maxLength": 300
+                },
+                "minItems": 1,
+                "maxItems": 8
+              }
+            }
+          },
+          "required": true
+        }
+      ]
+    },
+    {
+      "kind": "script",
+      "step_definition_id": "publish_plan",
+      "name": "Retain the plan",
+      "description": "Write what the writer returned into the plan record the reviewer reads and the approver approves. The plan writer declares no Workspace tool, so the Step that declares the file output is the Step that writes it, and a rehearsal and a live Run reach the record by the same road.",
+      "dependencies": [
+        {
+          "step_definition_id": "write_plan",
+          "mode": "required"
+        }
+      ],
+      "executable": ".flomaster/scripts/publish_plan.sh",
+      "runtime": "posix_shell",
+      "arguments": [
+        {
+          "kind": "format",
+          "segments": [
+            {
+              "kind": "literal",
+              "text": "artifacts/plan.json"
+            }
+          ],
+          "data_schema": {
+            "content_digest": "sha256:plan-artifact-path",
+            "contract": {
+              "schema_name": "PlanArtifactPath",
+              "json_schema": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 500
+              }
+            }
+          }
+        }
+      ],
+      "inputs": [
+        {
+          "input_name": "summary",
+          "value": {
+            "kind": "upstream_output",
+            "step_definition_id": "write_plan",
+            "output_name": "summary",
+            "data_schema": {
+              "content_digest": "sha256:plan-summary",
+              "contract": {
+                "schema_name": "PlanSummary",
+                "json_schema": {
+                  "type": "string",
+                  "maxLength": 400
+                }
+              }
+            }
+          }
+        },
+        {
+          "input_name": "steps",
+          "value": {
+            "kind": "upstream_output",
+            "step_definition_id": "write_plan",
+            "output_name": "steps",
+            "data_schema": {
+              "content_digest": "sha256:plan-steps",
+              "contract": {
+                "schema_name": "PlanSteps",
+                "json_schema": {
+                  "type": "array",
+                  "items": {
+                    "type": "string",
+                    "maxLength": 300
+                  },
+                  "minItems": 1,
+                  "maxItems": 8
+                }
+              }
+            }
+          }
+        }
+      ],
+      "outputs": [
+        {
+          "kind": "file",
+          "output_name": "plan_file",
+          "path": {
+            "kind": "format",
+            "segments": [
+              {
+                "kind": "literal",
+                "text": "artifacts/plan.json"
+              }
+            ],
+            "data_schema": {
+              "content_digest": "sha256:plan-artifact-path",
+              "contract": {
+                "schema_name": "PlanArtifactPath",
+                "json_schema": {
+                  "type": "string",
+                  "minLength": 1,
+                  "maxLength": 500
+                }
+              }
+            }
+          },
+          "artifact_kind": "plan",
+          "required": true,
+          "max_bytes": 8192
+        }
+      ]
+    },
+    {
+      "kind": "agent",
+      "step_definition_id": "review_plan",
+      "name": "Review the plan",
+      "description": "Judge the retained plan against its Work Item one declared dimension at a time and return a finding for each beside one verdict. A second Agent Profile does this, so the plan is not reviewed by whoever wrote it.",
+      "dependencies": [
+        {
+          "step_definition_id": "publish_plan",
+          "mode": "required"
+        }
+      ],
+      "agent": {
+        "agent_profile_id": "agent_profile_plan_reviewer",
+        "version": "1"
+      },
+      "context": [
+        {
+          "kind": "from",
+          "source": {
+            "kind": "upstream_output",
+            "step_definition_id": "publish_plan",
+            "output_name": "plan_file",
+            "data_schema": {
+              "content_digest": "sha256:16c6f4c5875d2e2a0f14d5b1c506f92dd7d970f3d406530dd1cea0258810bf1c",
+              "contract": {
+                "schema_name": "ArtifactReference",
+                "json_schema": {
+                  "$defs": {
+                    "ArtifactId": {
+                      "additionalProperties": false,
+                      "description": "Identify one immutable artifact record.",
+                      "properties": {
+                        "value": {
+                          "maxLength": 200,
+                          "minLength": 3,
+                          "title": "Value",
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "value"
+                      ],
+                      "title": "ArtifactId",
+                      "type": "object"
+                    }
+                  },
+                  "additionalProperties": false,
+                  "description": "Identify one exact immutable artifact version rather than only its family ID.",
+                  "properties": {
+                    "artifact_id": {
+                      "$ref": "#/$defs/ArtifactId"
+                    },
+                    "version": {
+                      "minimum": 1,
+                      "title": "Version",
+                      "type": "integer"
+                    }
+                  },
+                  "required": [
+                    "artifact_id",
+                    "version"
+                  ],
+                  "title": "ArtifactReference",
+                  "type": "object"
+                }
+              }
+            }
+          }
+        }
+      ],
+      "review_dimensions": [
+        "architecture",
+        "security",
+        "scope"
+      ],
+      "runtime": {
+        "runtime_id": "claude_agent_sdk",
+        "sdk_tool_ids": [],
+        "skill_ids": [],
+        "budget": {
+          "max_turns": 2,
+          "max_cost_usd": 0.5
+        },
+        "context_token_budget": 4000
+      },
+      "granted_operations": [],
+      "outputs": [
+        {
+          "kind": "value",
+          "output_name": "verdict",
+          "data_schema": {
+            "content_digest": "sha256:plan-review-verdict",
+            "contract": {
+              "schema_name": "PlanReviewVerdict",
+              "json_schema": {
+                "type": "string",
+                "enum": [
+                  "approve",
+                  "revise"
+                ]
+              }
+            }
+          },
+          "required": true
+        },
+        {
+          "kind": "value",
+          "output_name": "reason",
+          "data_schema": {
+            "content_digest": "sha256:plan-review-reason",
+            "contract": {
+              "schema_name": "PlanReviewReason",
+              "json_schema": {
+                "type": "string",
+                "maxLength": 400
+              }
+            }
+          },
+          "required": true
+        },
+        {
+          "kind": "value",
+          "output_name": "findings",
+          "data_schema": {
+            "content_digest": "sha256:plan-review-findings",
+            "contract": {
+              "schema_name": "PlanReviewFindings",
+              "json_schema": {
+                "type": "object",
+                "properties": {
+                  "architecture": {
+                    "type": "object",
+                    "properties": {
+                      "result": {
+                        "type": "string",
+                        "enum": [
+                          "pass",
+                          "fail"
+                        ]
+                      },
+                      "finding": {
+                        "type": "string",
+                        "maxLength": 400
+                      }
+                    },
+                    "required": [
+                      "result",
+                      "finding"
+                    ],
+                    "additionalProperties": false
+                  },
+                  "security": {
+                    "type": "object",
+                    "properties": {
+                      "result": {
+                        "type": "string",
+                        "enum": [
+                          "pass",
+                          "fail"
+                        ]
+                      },
+                      "finding": {
+                        "type": "string",
+                        "maxLength": 400
+                      }
+                    },
+                    "required": [
+                      "result",
+                      "finding"
+                    ],
+                    "additionalProperties": false
+                  },
+                  "scope": {
+                    "type": "object",
+                    "properties": {
+                      "result": {
+                        "type": "string",
+                        "enum": [
+                          "pass",
+                          "fail"
+                        ]
+                      },
+                      "finding": {
+                        "type": "string",
+                        "maxLength": 400
+                      }
+                    },
+                    "required": [
+                      "result",
+                      "finding"
+                    ],
+                    "additionalProperties": false
+                  }
+                },
+                "required": [
+                  "architecture",
+                  "security",
+                  "scope"
+                ],
+                "additionalProperties": false
+              }
+            }
+          },
+          "required": true
+        }
+      ]
+    },
+    {
+      "kind": "script",
+      "step_definition_id": "require_consistent_review",
+      "name": "Require a consistent review",
+      "description": "Stop the Run when the reviewer approved the plan although one of its own dimensions failed, saying so in words a person can act on, so the person asked to approve never reads a verdict the findings contradict.",
+      "dependencies": [
+        {
+          "step_definition_id": "review_plan",
+          "mode": "required"
+        }
+      ],
+      "executable": ".flomaster/scripts/require_consistent_review.sh",
+      "runtime": "posix_shell",
+      "arguments": [],
+      "inputs": [
+        {
+          "input_name": "verdict",
+          "value": {
+            "kind": "upstream_output",
+            "step_definition_id": "review_plan",
+            "output_name": "verdict",
+            "data_schema": {
+              "content_digest": "sha256:plan-review-verdict",
+              "contract": {
+                "schema_name": "PlanReviewVerdict",
+                "json_schema": {
+                  "type": "string",
+                  "enum": [
+                    "approve",
+                    "revise"
+                  ]
+                }
+              }
+            }
+          }
+        },
+        {
+          "input_name": "findings",
+          "value": {
+            "kind": "upstream_output",
+            "step_definition_id": "review_plan",
+            "output_name": "findings",
+            "data_schema": {
+              "content_digest": "sha256:plan-review-findings",
+              "contract": {
+                "schema_name": "PlanReviewFindings",
+                "json_schema": {
+                  "type": "object",
+                  "properties": {
+                    "architecture": {
+                      "type": "object",
+                      "properties": {
+                        "result": {
+                          "type": "string",
+                          "enum": [
+                            "pass",
+                            "fail"
+                          ]
+                        },
+                        "finding": {
+                          "type": "string",
+                          "maxLength": 400
+                        }
+                      },
+                      "required": [
+                        "result",
+                        "finding"
+                      ],
+                      "additionalProperties": false
+                    },
+                    "security": {
+                      "type": "object",
+                      "properties": {
+                        "result": {
+                          "type": "string",
+                          "enum": [
+                            "pass",
+                            "fail"
+                          ]
+                        },
+                        "finding": {
+                          "type": "string",
+                          "maxLength": 400
+                        }
+                      },
+                      "required": [
+                        "result",
+                        "finding"
+                      ],
+                      "additionalProperties": false
+                    },
+                    "scope": {
+                      "type": "object",
+                      "properties": {
+                        "result": {
+                          "type": "string",
+                          "enum": [
+                            "pass",
+                            "fail"
+                          ]
+                        },
+                        "finding": {
+                          "type": "string",
+                          "maxLength": 400
+                        }
+                      },
+                      "required": [
+                        "result",
+                        "finding"
+                      ],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": [
+                    "architecture",
+                    "security",
+                    "scope"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          }
+        }
+      ],
+      "failure_policy": {
+        "behavior": "halt"
+      }
+    },
+    {
+      "kind": "human",
+      "step_definition_id": "approve_plan",
+      "name": "Approve the plan",
+      "description": "Ask a person to approve the exact retained plan file rather than a summary of it.",
+      "dependencies": [
+        {
+          "step_definition_id": "review_plan",
+          "mode": "required"
+        },
+        {
+          "step_definition_id": "require_consistent_review",
+          "mode": "required"
+        }
+      ],
+      "decision": {
+        "decision_id": "approve_plan",
+        "timing": "after",
+        "approval_class": "plan",
+        "prompt": "Approve this exact retained plan?",
+        "subject": {
+          "subject_id": "plan_artifact",
+          "value": {
+            "kind": "upstream_output",
+            "step_definition_id": "publish_plan",
+            "output_name": "plan_file",
+            "data_schema": {
+              "content_digest": "sha256:16c6f4c5875d2e2a0f14d5b1c506f92dd7d970f3d406530dd1cea0258810bf1c",
+              "contract": {
+                "schema_name": "ArtifactReference",
+                "json_schema": {
+                  "$defs": {
+                    "ArtifactId": {
+                      "additionalProperties": false,
+                      "description": "Identify one immutable artifact record.",
+                      "properties": {
+                        "value": {
+                          "maxLength": 200,
+                          "minLength": 3,
+                          "title": "Value",
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "value"
+                      ],
+                      "title": "ArtifactId",
+                      "type": "object"
+                    }
+                  },
+                  "additionalProperties": false,
+                  "description": "Identify one exact immutable artifact version rather than only its family ID.",
+                  "properties": {
+                    "artifact_id": {
+                      "$ref": "#/$defs/ArtifactId"
+                    },
+                    "version": {
+                      "minimum": 1,
+                      "title": "Version",
+                      "type": "integer"
+                    }
+                  },
+                  "required": [
+                    "artifact_id",
+                    "version"
+                  ],
+                  "title": "ArtifactReference",
+                  "type": "object"
+                }
+              }
+            }
+          },
+          "invalidate_when_changed": true
+        },
+        "max_asks": 2
+      }
+    }
+  ]
+}

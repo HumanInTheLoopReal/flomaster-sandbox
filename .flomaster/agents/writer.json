@@ -1,0 +1,60 @@
+{
+  "agent_profile_id": "agent_profile_document_writer",
+  "version": "1",
+  "agent_id": {
+    "value": "agent_document_writer"
+  },
+  "name": "Change Notes Writer",
+  "responsibility": "Write one Work Item's change notes as text and name what they record.",
+  "profile": {
+    "profile_id": "document_writer",
+    "version": "1",
+    "runtime_id": "claude_agent_sdk",
+    "allowed_model_ids": [
+      "claude-haiku-5-5"
+    ],
+    "preferred_model_id": "claude-haiku-5-5",
+    "max_turns": 3,
+    "max_output_tokens": 4096,
+    "max_cost_usd": 1.0
+  },
+  "prompt": {
+    "definition_id": "write_prompt",
+    "version": "1"
+  },
+  "operation_grants": [],
+  "sdk_tool_ids": [],
+  "skill_ids": [],
+  "result_schema": {
+    "content_digest": "sha256:document-change-notes-envelope",
+    "contract": {
+      "schema_name": "ChangeNotes",
+      "json_schema": {
+        "type": "object",
+        "properties": {
+          "headline": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 120
+          },
+          "summary": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 400
+          },
+          "body": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 4000
+          }
+        },
+        "required": [
+          "headline",
+          "summary",
+          "body"
+        ],
+        "additionalProperties": false
+      }
+    }
+  }
+}

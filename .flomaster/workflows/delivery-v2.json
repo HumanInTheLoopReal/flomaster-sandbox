@@ -1,0 +1,5393 @@
+{
+  "workflow_definition_id": {
+    "value": "workflow_delivery"
+  },
+  "version": "2",
+  "name": "Full delivery",
+  "description": "Carry one admitted Work Item through planning, implementation, checks, review, publication, guarded merge, and terminal provider closure in one Run.",
+  "visibility": "public",
+  "steps": [
+    {
+      "kind": "agent",
+      "step_definition_id": "intake_classify",
+      "name": "Classify the request",
+      "description": "Name the kind of work the Work Item asks for and restate its request once.",
+      "agent": {
+        "agent_profile_id": "agent_profile_intake_classifier",
+        "version": "1"
+      },
+      "runtime": {
+        "runtime_id": "claude_agent_sdk",
+        "sdk_tool_ids": [],
+        "skill_ids": [],
+        "budget": {
+          "max_turns": 2,
+          "max_cost_usd": 0.5
+        },
+        "context_token_budget": 4000
+      },
+      "granted_operations": [],
+      "outputs": [
+        {
+          "kind": "value",
+          "output_name": "work_kind",
+          "data_schema": {
+            "content_digest": "sha256:intake-work-kind",
+            "contract": {
+              "schema_name": "IntakeWorkKind",
+              "json_schema": {
+                "type": "string",
+                "enum": [
+                  "bug",
+                  "feature",
+                  "chore",
+                  "needs_clarification"
+                ]
+              }
+            }
+          },
+          "required": true
+        },
+        {
+          "kind": "value",
+          "output_name": "request",
+          "data_schema": {
+            "content_digest": "sha256:intake-request-restatement",
+            "contract": {
+              "schema_name": "IntakeRequest",
+              "json_schema": {
+                "type": "string",
+                "maxLength": 400
+              }
+            }
+          },
+          "required": true
+        }
+      ]
+    },
+    {
+      "kind": "script",
+      "step_definition_id": "intake_require_clear_classification",
+      "name": "Require a clear classification",
+      "description": "Stop the Run when the classifier could not decide from the text, saying so in words a person can act on, so no later Step reads a placeholder kind.",
+      "dependencies": [
+        {
+          "step_definition_id": "intake_classify",
+          "mode": "required"
+        }
+      ],
+      "executable": ".flomaster/scripts/require_clear_classification.sh",
+      "runtime": "posix_shell",
+      "arguments": [],
+      "inputs": [
+        {
+          "input_name": "work_kind",
+          "value": {
+            "kind": "upstream_output",
+            "step_definition_id": "intake_classify",
+            "output_name": "work_kind",
+            "data_schema": {
+              "content_digest": "sha256:intake-work-kind",
+              "contract": {
+                "schema_name": "IntakeWorkKind",
+                "json_schema": {
+                  "type": "string",
+                  "enum": [
+                    "bug",
+                    "feature",
+                    "chore",
+                    "needs_clarification"
+                  ]
+                }
+              }
+            }
+          }
+        }
+      ],
+      "failure_policy": {
+        "behavior": "halt"
+      }
+    },
+    {
+      "kind": "script",
+      "step_definition_id": "intake_record_intake",
+      "name": "Record the intake decision",
+      "description": "Write what classify retained into the intake record and export it for a parent Workflow. The record path is declared once as the argument the script writes to, and the intake_record output captures that same path.",
+      "dependencies": [
+        {
+          "step_definition_id": "intake_classify",
+          "mode": "required"
+        },
+        {
+          "step_definition_id": "intake_require_clear_classification",
+          "mode": "required"
+        }
+      ],
+      "executable": ".flomaster/scripts/record_intake.sh",
+      "runtime": "posix_shell",
+      "arguments": [
+        {
+          "kind": "format",
+          "segments": [
+            {
+              "kind": "literal",
+              "text": "artifacts/intake.json"
+            }
+          ],
+          "data_schema": {
+            "content_digest": "sha256:intake-record-path",
+            "contract": {
+              "schema_name": "IntakeRecordPath",
+              "json_schema": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 500
+              }
+            }
+          }
+        }
+      ],
+      "inputs": [
+        {
+          "input_name": "work_kind",
+          "value": {
+            "kind": "upstream_output",
+            "step_definition_id": "intake_classify",
+            "output_name": "work_kind",
+            "data_schema": {
+              "content_digest": "sha256:intake-work-kind",
+              "contract": {
+                "schema_name": "IntakeWorkKind",
+                "json_schema": {
+                  "type": "string",
+                  "enum": [
+                    "bug",
+                    "feature",
+                    "chore",
+                    "needs_clarification"
+                  ]
+                }
+              }
+            }
+          }
+        },
+        {
+          "input_name": "request",
+          "value": {
+            "kind": "upstream_output",
+            "step_definition_id": "intake_classify",
+            "output_name": "request",
+            "data_schema": {
+              "content_digest": "sha256:intake-request-restatement",
+              "contract": {
+                "schema_name": "IntakeRequest",
+                "json_schema": {
+                  "type": "string",
+                  "maxLength": 400
+                }
+              }
+            }
+          }
+        }
+      ],
+      "outputs": [
+        {
+          "kind": "value",
+          "output_name": "classification",
+          "data_schema": {
+            "content_digest": "sha256:intake-classification-record",
+            "contract": {
+              "schema_name": "IntakeClassificationRecord",
+              "json_schema": {
+                "type": "object",
+                "properties": {
+                  "work_kind": {
+                    "type": "string",
+                    "enum": [
+                      "bug",
+                      "feature",
+                      "chore"
+                    ]
+                  },
+                  "request": {
+                    "type": "string",
+                    "maxLength": 400
+                  }
+                },
+                "required": [
+                  "work_kind",
+                  "request"
+                ],
+                "additionalProperties": false
+              }
+            }
+          },
+          "required": true
+        },
+        {
+          "kind": "file",
+          "output_name": "intake_record",
+          "path": {
+            "kind": "format",
+            "segments": [
+              {
+                "kind": "literal",
+                "text": "artifacts/intake.json"
+              }
+            ],
+            "data_schema": {
+              "content_digest": "sha256:intake-record-path",
+              "contract": {
+                "schema_name": "IntakeRecordPath",
+                "json_schema": {
+                  "type": "string",
+                  "minLength": 1,
+                  "maxLength": 500
+                }
+              }
+            }
+          },
+          "artifact_kind": "change_request",
+          "required": true,
+          "max_bytes": 4096
+        }
+      ]
+    },
+    {
+      "kind": "script",
+      "step_definition_id": "plan_select_depth",
+      "name": "Select the plan depth",
+      "description": "Publish the declared depth as this Step's own output, which is what the route below selects a preparation Step on.",
+      "executable": ".flomaster/scripts/select_depth.sh",
+      "runtime": "posix_shell",
+      "arguments": [],
+      "inputs": [
+        {
+          "input_name": "depth",
+          "value": {
+            "kind": "workflow_input",
+            "input_name": "depth",
+            "data_schema": {
+              "content_digest": "sha256:plan-depth",
+              "contract": {
+                "schema_name": "PlanDepth",
+                "json_schema": {
+                  "type": "string",
+                  "enum": [
+                    "shallow",
+                    "full"
+                  ]
+                }
+              }
+            }
+          }
+        }
+      ],
+      "outputs": [
+        {
+          "kind": "value",
+          "output_name": "selection",
+          "data_schema": {
+            "content_digest": "sha256:plan-depth-selection",
+            "contract": {
+              "schema_name": "PlanDepthSelection",
+              "json_schema": {
+                "type": "object",
+                "properties": {
+                  "depth": {
+                    "type": "string",
+                    "enum": [
+                      "shallow",
+                      "full"
+                    ]
+                  }
+                },
+                "required": [
+                  "depth"
+                ],
+                "additionalProperties": false
+              }
+            }
+          },
+          "required": true
+        }
+      ],
+      "routes": {
+        "on": "selection",
+        "field": "depth",
+        "branches": [
+          {
+            "outcome": "full",
+            "target_step_definition_ids": [
+              "plan_research"
+            ]
+          },
+          {
+            "outcome": "shallow",
+            "target_step_definition_ids": [
+              "plan_note_shallow_depth"
+            ]
+          }
+        ],
+        "default_target_step_definition_ids": []
+      },
+      "dependencies": [
+        {
+          "step_definition_id": "intake_record_intake",
+          "mode": "required"
+        }
+      ]
+    },
+    {
+      "kind": "agent",
+      "step_definition_id": "plan_research",
+      "name": "State what the plan needs to learn",
+      "description": "Read the Work Item and name the open questions a plan would have to answer. The full depth selects this Step and the shallow depth does not.",
+      "dependencies": [
+        {
+          "step_definition_id": "plan_select_depth",
+          "mode": "required"
+        }
+      ],
+      "agent": {
+        "agent_profile_id": "agent_profile_plan_researcher",
+        "version": "1"
+      },
+      "runtime": {
+        "runtime_id": "claude_agent_sdk",
+        "sdk_tool_ids": [],
+        "skill_ids": [],
+        "budget": {
+          "max_turns": 2,
+          "max_cost_usd": 0.5
+        },
+        "context_token_budget": 4000
+      },
+      "granted_operations": [],
+      "outputs": [
+        {
+          "kind": "value",
+          "output_name": "research",
+          "data_schema": {
+            "content_digest": "sha256:plan-research-envelope",
+            "contract": {
+              "schema_name": "PlanResearch",
+              "json_schema": {
+                "type": "object",
+                "properties": {
+                  "questions": {
+                    "type": "array",
+                    "items": {
+                      "type": "string",
+                      "maxLength": 300
+                    },
+                    "minItems": 1,
+                    "maxItems": 5
+                  }
+                },
+                "required": [
+                  "questions"
+                ],
+                "additionalProperties": false
+              }
+            }
+          },
+          "required": true
+        }
+      ]
+    },
+    {
+      "kind": "script",
+      "step_definition_id": "plan_note_shallow_depth",
+      "name": "Plan from the Work Item alone",
+      "description": "Stand in for the research the shallow depth does not do, so one Step is selected either way and the plan that follows runs exactly once.",
+      "dependencies": [
+        {
+          "step_definition_id": "plan_select_depth",
+          "mode": "required"
+        }
+      ],
+      "executable": ".flomaster/scripts/note_shallow_depth.sh",
+      "runtime": "posix_shell",
+      "arguments": []
+    },
+    {
+      "kind": "agent",
+      "step_definition_id": "plan_write_plan",
+      "name": "Write the plan",
+      "description": "Return the plan the Step below retains, as a summary and the ordered steps. It depends ordinarily on both preparation Steps, so it runs once after whichever one the depth selected and is not held back by the one that was skipped.",
+      "dependencies": [
+        {
+          "step_definition_id": "plan_research",
+          "mode": "ordinary"
+        },
+        {
+          "step_definition_id": "plan_note_shallow_depth",
+          "mode": "ordinary"
+        }
+      ],
+      "agent": {
+        "agent_profile_id": "agent_profile_plan_writer",
+        "version": "1"
+      },
+      "runtime": {
+        "runtime_id": "claude_agent_sdk",
+        "sdk_tool_ids": [],
+        "skill_ids": [],
+        "budget": {
+          "max_turns": 4,
+          "max_cost_usd": 0.5
+        },
+        "context_token_budget": 4000
+      },
+      "granted_operations": [],
+      "outputs": [
+        {
+          "kind": "value",
+          "output_name": "summary",
+          "data_schema": {
+            "content_digest": "sha256:plan-summary",
+            "contract": {
+              "schema_name": "PlanSummary",
+              "json_schema": {
+                "type": "string",
+                "maxLength": 400
+              }
+            }
+          },
+          "required": true
+        },
+        {
+          "kind": "value",
+          "output_name": "steps",
+          "data_schema": {
+            "content_digest": "sha256:plan-steps",
+            "contract": {
+              "schema_name": "PlanSteps",
+              "json_schema": {
+                "type": "array",
+                "items": {
+                  "type": "string",
+                  "maxLength": 300
+                },
+                "minItems": 1,
+                "maxItems": 8
+              }
+            }
+          },
+          "required": true
+        }
+      ]
+    },
+    {
+      "kind": "script",
+      "step_definition_id": "plan_publish_plan",
+      "name": "Retain the plan",
+      "description": "Write what the writer returned into the plan record the reviewer reads and the approver approves. The plan writer declares no Workspace tool, so the Step that declares the file output is the Step that writes it, and a rehearsal and a live Run reach the record by the same road.",
+      "dependencies": [
+        {
+          "step_definition_id": "plan_write_plan",
+          "mode": "required"
+        }
+      ],
+      "executable": ".flomaster/scripts/publish_plan.sh",
+      "runtime": "posix_shell",
+      "arguments": [
+        {
+          "kind": "format",
+          "segments": [
+            {
+              "kind": "literal",
+              "text": "artifacts/plan.json"
+            }
+          ],
+          "data_schema": {
+            "content_digest": "sha256:plan-artifact-path",
+            "contract": {
+              "schema_name": "PlanArtifactPath",
+              "json_schema": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 500
+              }
+            }
+          }
+        }
+      ],
+      "inputs": [
+        {
+          "input_name": "summary",
+          "value": {
+            "kind": "upstream_output",
+            "step_definition_id": "plan_write_plan",
+            "output_name": "summary",
+            "data_schema": {
+              "content_digest": "sha256:plan-summary",
+              "contract": {
+                "schema_name": "PlanSummary",
+                "json_schema": {
+                  "type": "string",
+                  "maxLength": 400
+                }
+              }
+            }
+          }
+        },
+        {
+          "input_name": "steps",
+          "value": {
+            "kind": "upstream_output",
+            "step_definition_id": "plan_write_plan",
+            "output_name": "steps",
+            "data_schema": {
+              "content_digest": "sha256:plan-steps",
+              "contract": {
+                "schema_name": "PlanSteps",
+                "json_schema": {
+                  "type": "array",
+                  "items": {
+                    "type": "string",
+                    "maxLength": 300
+                  },
+                  "minItems": 1,
+                  "maxItems": 8
+                }
+              }
+            }
+          }
+        }
+      ],
+      "outputs": [
+        {
+          "kind": "file",
+          "output_name": "plan_file",
+          "path": {
+            "kind": "format",
+            "segments": [
+              {
+                "kind": "literal",
+                "text": "artifacts/plan.json"
+              }
+            ],
+            "data_schema": {
+              "content_digest": "sha256:plan-artifact-path",
+              "contract": {
+                "schema_name": "PlanArtifactPath",
+                "json_schema": {
+                  "type": "string",
+                  "minLength": 1,
+                  "maxLength": 500
+                }
+              }
+            }
+          },
+          "artifact_kind": "plan",
+          "required": true,
+          "max_bytes": 8192
+        }
+      ]
+    },
+    {
+      "kind": "agent",
+      "step_definition_id": "plan_review_plan",
+      "name": "Review the plan",
+      "description": "Judge the retained plan against its Work Item one declared dimension at a time and return a finding for each beside one verdict. A second Agent Profile does this, so the plan is not reviewed by whoever wrote it.",
+      "dependencies": [
+        {
+          "step_definition_id": "plan_publish_plan",
+          "mode": "required"
+        }
+      ],
+      "agent": {
+        "agent_profile_id": "agent_profile_plan_reviewer",
+        "version": "1"
+      },
+      "context": [
+        {
+          "kind": "from",
+          "source": {
+            "kind": "upstream_output",
+            "step_definition_id": "plan_publish_plan",
+            "output_name": "plan_file",
+            "data_schema": {
+              "content_digest": "sha256:16c6f4c5875d2e2a0f14d5b1c506f92dd7d970f3d406530dd1cea0258810bf1c",
+              "contract": {
+                "schema_name": "ArtifactReference",
+                "json_schema": {
+                  "$defs": {
+                    "ArtifactId": {
+                      "additionalProperties": false,
+                      "description": "Identify one immutable artifact record.",
+                      "properties": {
+                        "value": {
+                          "maxLength": 200,
+                          "minLength": 3,
+                          "title": "Value",
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "value"
+                      ],
+                      "title": "ArtifactId",
+                      "type": "object"
+                    }
+                  },
+                  "additionalProperties": false,
+                  "description": "Identify one exact immutable artifact version rather than only its family ID.",
+                  "properties": {
+                    "artifact_id": {
+                      "$ref": "#/$defs/ArtifactId"
+                    },
+                    "version": {
+                      "minimum": 1,
+                      "title": "Version",
+                      "type": "integer"
+                    }
+                  },
+                  "required": [
+                    "artifact_id",
+                    "version"
+                  ],
+                  "title": "ArtifactReference",
+                  "type": "object"
+                }
+              }
+            }
+          }
+        }
+      ],
+      "review_dimensions": [
+        "architecture",
+        "security",
+        "scope"
+      ],
+      "runtime": {
+        "runtime_id": "claude_agent_sdk",
+        "sdk_tool_ids": [],
+        "skill_ids": [],
+        "budget": {
+          "max_turns": 2,
+          "max_cost_usd": 0.5
+        },
+        "context_token_budget": 4000
+      },
+      "granted_operations": [],
+      "outputs": [
+        {
+          "kind": "value",
+          "output_name": "verdict",
+          "data_schema": {
+            "content_digest": "sha256:plan-review-verdict",
+            "contract": {
+              "schema_name": "PlanReviewVerdict",
+              "json_schema": {
+                "type": "string",
+                "enum": [
+                  "approve",
+                  "revise"
+                ]
+              }
+            }
+          },
+          "required": true
+        },
+        {
+          "kind": "value",
+          "output_name": "reason",
+          "data_schema": {
+            "content_digest": "sha256:plan-review-reason",
+            "contract": {
+              "schema_name": "PlanReviewReason",
+              "json_schema": {
+                "type": "string",
+                "maxLength": 400
+              }
+            }
+          },
+          "required": true
+        },
+        {
+          "kind": "value",
+          "output_name": "findings",
+          "data_schema": {
+            "content_digest": "sha256:plan-review-findings",
+            "contract": {
+              "schema_name": "PlanReviewFindings",
+              "json_schema": {
+                "type": "object",
+                "properties": {
+                  "architecture": {
+                    "type": "object",
+                    "properties": {
+                      "result": {
+                        "type": "string",
+                        "enum": [
+                          "pass",
+                          "fail"
+                        ]
+                      },
+                      "finding": {
+                        "type": "string",
+                        "maxLength": 400
+                      }
+                    },
+                    "required": [
+                      "result",
+                      "finding"
+                    ],
+                    "additionalProperties": false
+                  },
+                  "security": {
+                    "type": "object",
+                    "properties": {
+                      "result": {
+                        "type": "string",
+                        "enum": [
+                          "pass",
+                          "fail"
+                        ]
+                      },
+                      "finding": {
+                        "type": "string",
+                        "maxLength": 400
+                      }
+                    },
+                    "required": [
+                      "result",
+                      "finding"
+                    ],
+                    "additionalProperties": false
+                  },
+                  "scope": {
+                    "type": "object",
+                    "properties": {
+                      "result": {
+                        "type": "string",
+                        "enum": [
+                          "pass",
+                          "fail"
+                        ]
+                      },
+                      "finding": {
+                        "type": "string",
+                        "maxLength": 400
+                      }
+                    },
+                    "required": [
+                      "result",
+                      "finding"
+                    ],
+                    "additionalProperties": false
+                  }
+                },
+                "required": [
+                  "architecture",
+                  "security",
+                  "scope"
+                ],
+                "additionalProperties": false
+              }
+            }
+          },
+          "required": true
+        }
+      ]
+    },
+    {
+      "kind": "script",
+      "step_definition_id": "plan_require_consistent_review",
+      "name": "Require a consistent review",
+      "description": "Stop the Run when the reviewer approved the plan although one of its own dimensions failed, saying so in words a person can act on, so the person asked to approve never reads a verdict the findings contradict.",
+      "dependencies": [
+        {
+          "step_definition_id": "plan_review_plan",
+          "mode": "required"
+        }
+      ],
+      "executable": ".flomaster/scripts/require_consistent_review.sh",
+      "runtime": "posix_shell",
+      "arguments": [],
+      "inputs": [
+        {
+          "input_name": "verdict",
+          "value": {
+            "kind": "upstream_output",
+            "step_definition_id": "plan_review_plan",
+            "output_name": "verdict",
+            "data_schema": {
+              "content_digest": "sha256:plan-review-verdict",
+              "contract": {
+                "schema_name": "PlanReviewVerdict",
+                "json_schema": {
+                  "type": "string",
+                  "enum": [
+                    "approve",
+                    "revise"
+                  ]
+                }
+              }
+            }
+          }
+        },
+        {
+          "input_name": "findings",
+          "value": {
+            "kind": "upstream_output",
+            "step_definition_id": "plan_review_plan",
+            "output_name": "findings",
+            "data_schema": {
+              "content_digest": "sha256:plan-review-findings",
+              "contract": {
+                "schema_name": "PlanReviewFindings",
+                "json_schema": {
+                  "type": "object",
+                  "properties": {
+                    "architecture": {
+                      "type": "object",
+                      "properties": {
+                        "result": {
+                          "type": "string",
+                          "enum": [
+                            "pass",
+                            "fail"
+                          ]
+                        },
+                        "finding": {
+                          "type": "string",
+                          "maxLength": 400
+                        }
+                      },
+                      "required": [
+                        "result",
+                        "finding"
+                      ],
+                      "additionalProperties": false
+                    },
+                    "security": {
+                      "type": "object",
+                      "properties": {
+                        "result": {
+                          "type": "string",
+                          "enum": [
+                            "pass",
+                            "fail"
+                          ]
+                        },
+                        "finding": {
+                          "type": "string",
+                          "maxLength": 400
+                        }
+                      },
+                      "required": [
+                        "result",
+                        "finding"
+                      ],
+                      "additionalProperties": false
+                    },
+                    "scope": {
+                      "type": "object",
+                      "properties": {
+                        "result": {
+                          "type": "string",
+                          "enum": [
+                            "pass",
+                            "fail"
+                          ]
+                        },
+                        "finding": {
+                          "type": "string",
+                          "maxLength": 400
+                        }
+                      },
+                      "required": [
+                        "result",
+                        "finding"
+                      ],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": [
+                    "architecture",
+                    "security",
+                    "scope"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          }
+        }
+      ],
+      "failure_policy": {
+        "behavior": "halt"
+      }
+    },
+    {
+      "kind": "human",
+      "step_definition_id": "plan_approve_plan",
+      "name": "Approve the plan",
+      "description": "Ask a person to approve the exact retained plan file rather than a summary of it.",
+      "dependencies": [
+        {
+          "step_definition_id": "plan_review_plan",
+          "mode": "required"
+        },
+        {
+          "step_definition_id": "plan_require_consistent_review",
+          "mode": "required"
+        }
+      ],
+      "decision": {
+        "decision_id": "approve_plan",
+        "timing": "after",
+        "approval_class": "plan",
+        "prompt": "Approve this exact retained plan?",
+        "subject": {
+          "subject_id": "plan_artifact",
+          "value": {
+            "kind": "upstream_output",
+            "step_definition_id": "plan_publish_plan",
+            "output_name": "plan_file",
+            "data_schema": {
+              "content_digest": "sha256:16c6f4c5875d2e2a0f14d5b1c506f92dd7d970f3d406530dd1cea0258810bf1c",
+              "contract": {
+                "schema_name": "ArtifactReference",
+                "json_schema": {
+                  "$defs": {
+                    "ArtifactId": {
+                      "additionalProperties": false,
+                      "description": "Identify one immutable artifact record.",
+                      "properties": {
+                        "value": {
+                          "maxLength": 200,
+                          "minLength": 3,
+                          "title": "Value",
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "value"
+                      ],
+                      "title": "ArtifactId",
+                      "type": "object"
+                    }
+                  },
+                  "additionalProperties": false,
+                  "description": "Identify one exact immutable artifact version rather than only its family ID.",
+                  "properties": {
+                    "artifact_id": {
+                      "$ref": "#/$defs/ArtifactId"
+                    },
+                    "version": {
+                      "minimum": 1,
+                      "title": "Version",
+                      "type": "integer"
+                    }
+                  },
+                  "required": [
+                    "artifact_id",
+                    "version"
+                  ],
+                  "title": "ArtifactReference",
+                  "type": "object"
+                }
+              }
+            }
+          },
+          "invalidate_when_changed": true
+        },
+        "max_asks": 2
+      },
+      "routes": {
+        "on": "decision",
+        "field": "action",
+        "branches": [
+          {
+            "outcome": "approve",
+            "target_step_definition_ids": [
+              "ship_branch"
+            ]
+          },
+          {
+            "outcome": "reject",
+            "target_step_definition_ids": []
+          },
+          {
+            "outcome": "request_changes",
+            "target_step_definition_ids": []
+          }
+        ],
+        "default_target_step_definition_ids": []
+      }
+    },
+    {
+      "kind": "agent",
+      "step_definition_id": "implement_code",
+      "name": "Make the change",
+      "description": "Ask the implementing Agent to change the Workspace and write the note that explains the change.",
+      "agent": {
+        "agent_profile_id": "agent_profile_implement_coder",
+        "version": "1"
+      },
+      "runtime": {
+        "runtime_id": "claude_agent_sdk",
+        "sdk_tool_ids": [
+          "read_workspace",
+          "search_workspace",
+          "write_workspace"
+        ],
+        "skill_ids": [],
+        "budget": {
+          "max_turns": 8,
+          "max_cost_usd": 1.0
+        },
+        "context_token_budget": 8000
+      },
+      "granted_operations": [],
+      "outputs": [
+        {
+          "kind": "value",
+          "output_name": "change_summary",
+          "data_schema": {
+            "content_digest": "sha256:implement-change-summary",
+            "contract": {
+              "schema_name": "ImplementChangeSummary",
+              "json_schema": {
+                "type": "string",
+                "maxLength": 400
+              }
+            }
+          },
+          "required": true
+        },
+        {
+          "kind": "value",
+          "output_name": "commit_subject",
+          "data_schema": {
+            "kind": "schema_asset",
+            "reference": {
+              "definition_id": "git_commit_message",
+              "version": "1"
+            }
+          },
+          "required": true
+        },
+        {
+          "kind": "value",
+          "output_name": "changed_paths",
+          "data_schema": {
+            "kind": "schema_asset",
+            "reference": {
+              "definition_id": "git_stage_paths",
+              "version": "1"
+            }
+          },
+          "required": true
+        },
+        {
+          "kind": "file",
+          "output_name": "change_note",
+          "path": {
+            "kind": "format",
+            "segments": [
+              {
+                "kind": "literal",
+                "text": "artifacts/implementation.md"
+              }
+            ],
+            "data_schema": {
+              "content_digest": "sha256:implement-change-note-path",
+              "contract": {
+                "schema_name": "ImplementChangeNotePath",
+                "json_schema": {
+                  "type": "object",
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "artifact_kind": "documentation",
+          "required": true,
+          "max_bytes": 65536
+        }
+      ],
+      "dependencies": [
+        {
+          "step_definition_id": "ship_branch",
+          "mode": "required"
+        }
+      ]
+    },
+    {
+      "kind": "agent",
+      "step_definition_id": "validate_decide_e2e",
+      "name": "Decide the check scope",
+      "description": "Judge whether this change needs an end-to-end check and retain that decision.",
+      "agent": {
+        "agent_profile_id": "agent_profile_validate_scope_judge",
+        "version": "1"
+      },
+      "runtime": {
+        "runtime_id": "claude_agent_sdk",
+        "sdk_tool_ids": [],
+        "skill_ids": [],
+        "budget": {
+          "max_turns": 2,
+          "max_cost_usd": 0.5
+        },
+        "context_token_budget": 4000
+      },
+      "granted_operations": [],
+      "outputs": [
+        {
+          "kind": "value",
+          "output_name": "needs_e2e",
+          "data_schema": {
+            "content_digest": "sha256:validate-e2e-scope",
+            "contract": {
+              "schema_name": "ValidateEndToEndScope",
+              "json_schema": {
+                "type": "string",
+                "enum": [
+                  "required",
+                  "not_required"
+                ]
+              }
+            }
+          },
+          "required": true
+        },
+        {
+          "kind": "value",
+          "output_name": "reason",
+          "data_schema": {
+            "content_digest": "sha256:validate-e2e-scope-reason",
+            "contract": {
+              "schema_name": "ValidateEndToEndScopeReason",
+              "json_schema": {
+                "type": "string",
+                "minLength": 30,
+                "maxLength": 400
+              }
+            }
+          },
+          "required": true
+        }
+      ],
+      "dependencies": [
+        {
+          "step_definition_id": "implement_code",
+          "mode": "required"
+        }
+      ]
+    },
+    {
+      "kind": "script",
+      "step_definition_id": "validate_run",
+      "name": "Run the checks",
+      "description": "Run the checks the retained scope selected and retain what each one found.",
+      "dependencies": [
+        {
+          "step_definition_id": "validate_decide_e2e",
+          "mode": "required"
+        }
+      ],
+      "executable": ".flomaster/scripts/run_checks.sh",
+      "runtime": "posix_shell",
+      "arguments": [],
+      "timeout_seconds": 120,
+      "inputs": [
+        {
+          "input_name": "needs_e2e",
+          "value": {
+            "kind": "upstream_output",
+            "step_definition_id": "validate_decide_e2e",
+            "output_name": "needs_e2e",
+            "data_schema": {
+              "content_digest": "sha256:validate-e2e-scope",
+              "contract": {
+                "schema_name": "ValidateEndToEndScope",
+                "json_schema": {
+                  "type": "string",
+                  "enum": [
+                    "required",
+                    "not_required"
+                  ]
+                }
+              }
+            }
+          }
+        }
+      ],
+      "outputs": [
+        {
+          "kind": "value",
+          "output_name": "result",
+          "data_schema": {
+            "content_digest": "sha256:validate-check-result",
+            "contract": {
+              "schema_name": "ValidateCheckResult",
+              "json_schema": {
+                "type": "object",
+                "properties": {
+                  "checks": {
+                    "type": "string",
+                    "maxLength": 600
+                  },
+                  "failures": {
+                    "type": "integer",
+                    "minimum": 0
+                  },
+                  "inconclusive": {
+                    "type": "integer",
+                    "minimum": 0
+                  }
+                },
+                "required": [
+                  "checks",
+                  "failures",
+                  "inconclusive"
+                ],
+                "additionalProperties": false
+              }
+            }
+          },
+          "required": true
+        }
+      ]
+    },
+    {
+      "kind": "agent",
+      "step_definition_id": "validate_summarize",
+      "name": "Report what was checked",
+      "description": "State in plain English what was checked and what it found, and give one verdict.",
+      "dependencies": [
+        {
+          "step_definition_id": "validate_run",
+          "mode": "required"
+        }
+      ],
+      "agent": {
+        "agent_profile_id": "agent_profile_validate_reporter",
+        "version": "1"
+      },
+      "runtime": {
+        "runtime_id": "claude_agent_sdk",
+        "sdk_tool_ids": [],
+        "skill_ids": [],
+        "budget": {
+          "max_turns": 2,
+          "max_cost_usd": 0.5
+        },
+        "context_token_budget": 4000
+      },
+      "granted_operations": [],
+      "inputs": [
+        {
+          "input_name": "needs_e2e",
+          "value": {
+            "kind": "upstream_output",
+            "step_definition_id": "validate_decide_e2e",
+            "output_name": "needs_e2e",
+            "data_schema": {
+              "content_digest": "sha256:validate-e2e-scope",
+              "contract": {
+                "schema_name": "ValidateEndToEndScope",
+                "json_schema": {
+                  "type": "string",
+                  "enum": [
+                    "required",
+                    "not_required"
+                  ]
+                }
+              }
+            }
+          }
+        },
+        {
+          "input_name": "result",
+          "value": {
+            "kind": "upstream_output",
+            "step_definition_id": "validate_run",
+            "output_name": "result",
+            "data_schema": {
+              "content_digest": "sha256:validate-check-result",
+              "contract": {
+                "schema_name": "ValidateCheckResult",
+                "json_schema": {
+                  "type": "object",
+                  "properties": {
+                    "checks": {
+                      "type": "string",
+                      "maxLength": 600
+                    },
+                    "failures": {
+                      "type": "integer",
+                      "minimum": 0
+                    },
+                    "inconclusive": {
+                      "type": "integer",
+                      "minimum": 0
+                    }
+                  },
+                  "required": [
+                    "checks",
+                    "failures",
+                    "inconclusive"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          }
+        }
+      ],
+      "outputs": [
+        {
+          "kind": "value",
+          "output_name": "summary",
+          "data_schema": {
+            "content_digest": "sha256:validate-report-summary",
+            "contract": {
+              "schema_name": "ValidateReportSummary",
+              "json_schema": {
+                "type": "string",
+                "minLength": 40,
+                "maxLength": 600
+              }
+            }
+          },
+          "required": true
+        },
+        {
+          "kind": "value",
+          "output_name": "verdict",
+          "data_schema": {
+            "content_digest": "sha256:validate-report-verdict",
+            "contract": {
+              "schema_name": "ValidateReportVerdict",
+              "json_schema": {
+                "type": "string",
+                "enum": [
+                  "passed",
+                  "failed",
+                  "inconclusive"
+                ]
+              }
+            }
+          },
+          "required": true
+        }
+      ]
+    },
+    {
+      "kind": "agent",
+      "step_definition_id": "review_first_pass",
+      "name": "Review the change",
+      "description": "Judge the change against its request and either approve it or raise one concern.",
+      "agent": {
+        "agent_profile_id": "agent_profile_delivery_review_first_pass",
+        "version": "1"
+      },
+      "runtime": {
+        "runtime_id": "claude_agent_sdk",
+        "sdk_tool_ids": [
+          "read_workspace",
+          "search_workspace"
+        ],
+        "skill_ids": [],
+        "budget": {
+          "max_turns": 4,
+          "max_cost_usd": 0.5
+        },
+        "context_token_budget": 4000
+      },
+      "granted_operations": [],
+      "outputs": [
+        {
+          "kind": "value",
+          "output_name": "verdict",
+          "data_schema": {
+            "content_digest": "sha256:review-first-pass-verdict",
+            "contract": {
+              "schema_name": "ReviewVerdict",
+              "json_schema": {
+                "type": "object",
+                "properties": {
+                  "status": {
+                    "type": "string",
+                    "enum": [
+                      "approved",
+                      "changes_requested"
+                    ]
+                  },
+                  "summary": {
+                    "type": "string",
+                    "maxLength": 2000
+                  },
+                  "finding_id": {
+                    "type": "string",
+                    "maxLength": 200
+                  },
+                  "severity": {
+                    "type": "string",
+                    "enum": [
+                      "skippable",
+                      "technical_debt",
+                      "blocker"
+                    ]
+                  },
+                  "location": {
+                    "type": "string",
+                    "maxLength": 1000
+                  }
+                },
+                "required": [
+                  "status",
+                  "summary"
+                ],
+                "additionalProperties": false
+              }
+            }
+          },
+          "required": true
+        }
+      ],
+      "routes": {
+        "on": "verdict",
+        "field": "status",
+        "branches": [
+          {
+            "outcome": "changes_requested",
+            "target_step_definition_ids": [
+              "review_repair"
+            ]
+          },
+          {
+            "outcome": "approved",
+            "target_step_definition_ids": [
+              "review_record_clean"
+            ]
+          }
+        ],
+        "default_target_step_definition_ids": []
+      },
+      "dependencies": [
+        {
+          "step_definition_id": "ship_write_note",
+          "mode": "required"
+        }
+      ]
+    },
+    {
+      "kind": "agent",
+      "step_definition_id": "review_repair",
+      "name": "Answer the concern",
+      "description": "Make the one change the first pass asked for and report what was done.",
+      "dependencies": [
+        {
+          "step_definition_id": "review_first_pass",
+          "mode": "required"
+        }
+      ],
+      "agent": {
+        "agent_profile_id": "agent_profile_delivery_review_repair",
+        "version": "1"
+      },
+      "runtime": {
+        "runtime_id": "claude_agent_sdk",
+        "sdk_tool_ids": [
+          "read_workspace",
+          "search_workspace",
+          "write_workspace"
+        ],
+        "skill_ids": [],
+        "budget": {
+          "max_turns": 6,
+          "max_cost_usd": 0.5
+        },
+        "context_token_budget": 4000
+      },
+      "granted_operations": [],
+      "inputs": [
+        {
+          "input_name": "verdict",
+          "value": {
+            "kind": "upstream_output",
+            "step_definition_id": "review_first_pass",
+            "output_name": "verdict",
+            "data_schema": {
+              "content_digest": "sha256:review-first-pass-verdict",
+              "contract": {
+                "schema_name": "ReviewVerdict",
+                "json_schema": {
+                  "type": "object",
+                  "properties": {
+                    "status": {
+                      "type": "string",
+                      "enum": [
+                        "approved",
+                        "changes_requested"
+                      ]
+                    },
+                    "summary": {
+                      "type": "string",
+                      "maxLength": 2000
+                    },
+                    "finding_id": {
+                      "type": "string",
+                      "maxLength": 200
+                    },
+                    "severity": {
+                      "type": "string",
+                      "enum": [
+                        "skippable",
+                        "technical_debt",
+                        "blocker"
+                      ]
+                    },
+                    "location": {
+                      "type": "string",
+                      "maxLength": 1000
+                    }
+                  },
+                  "required": [
+                    "status",
+                    "summary"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          }
+        }
+      ],
+      "outputs": [
+        {
+          "kind": "value",
+          "output_name": "repair_note",
+          "data_schema": {
+            "content_digest": "sha256:review-repair-resolution",
+            "contract": {
+              "schema_name": "ReviewRepairNote",
+              "json_schema": {
+                "type": "object",
+                "properties": {
+                  "resolution": {
+                    "type": "string",
+                    "maxLength": 2000
+                  }
+                },
+                "required": [
+                  "resolution"
+                ],
+                "additionalProperties": false
+              }
+            }
+          },
+          "required": true
+        }
+      ]
+    },
+    {
+      "kind": "script",
+      "step_definition_id": "review_record_clean",
+      "name": "Record an unchanged review",
+      "description": "Settle the sibling branch when the first pass asked for no change.",
+      "dependencies": [
+        {
+          "step_definition_id": "review_first_pass",
+          "mode": "required"
+        }
+      ],
+      "executable": ".flomaster/scripts/record-clean.sh",
+      "runtime": "posix_shell",
+      "arguments": []
+    },
+    {
+      "kind": "script",
+      "step_definition_id": "delivery_cleanup_retained_files",
+      "name": "Clean retained temporary files",
+      "description": "Remove only the already captured intake, plan, and implementation-note files before observing the publication change set.",
+      "executable": ".flomaster/scripts/cleanup_publication_capture.sh",
+      "runtime": "posix_shell",
+      "dependencies": [
+        {
+          "step_definition_id": "review_repair",
+          "mode": "ordinary"
+        },
+        {
+          "step_definition_id": "review_record_clean",
+          "mode": "ordinary"
+        }
+      ],
+      "arguments": [
+        {
+          "kind": "format",
+          "segments": [
+            {
+              "kind": "literal",
+              "text": "artifacts/intake.json"
+            }
+          ],
+          "data_schema": {
+            "content_digest": "sha256:cd1a463c46d6264134447db17a8c3c7abe5b9a2488c6d759fea66da1f96b133e",
+            "contract": {
+              "schema_name": "PublicationCapturePath",
+              "json_schema": {
+                "type": "object",
+                "additionalProperties": false
+              }
+            }
+          }
+        },
+        {
+          "kind": "format",
+          "segments": [
+            {
+              "kind": "literal",
+              "text": "artifacts/plan.json"
+            }
+          ],
+          "data_schema": {
+            "content_digest": "sha256:cd1a463c46d6264134447db17a8c3c7abe5b9a2488c6d759fea66da1f96b133e",
+            "contract": {
+              "schema_name": "PublicationCapturePath",
+              "json_schema": {
+                "type": "object",
+                "additionalProperties": false
+              }
+            }
+          }
+        },
+        {
+          "kind": "format",
+          "segments": [
+            {
+              "kind": "literal",
+              "text": "artifacts/implementation.md"
+            }
+          ],
+          "data_schema": {
+            "content_digest": "sha256:cd1a463c46d6264134447db17a8c3c7abe5b9a2488c6d759fea66da1f96b133e",
+            "contract": {
+              "schema_name": "PublicationCapturePath",
+              "json_schema": {
+                "type": "object",
+                "additionalProperties": false
+              }
+            }
+          }
+        }
+      ],
+      "outputs": []
+    },
+    {
+      "kind": "operation",
+      "step_definition_id": "delivery_capture_implementation",
+      "name": "Capture the publication Implementation",
+      "description": "Capture the publication Implementation from retained runtime facts.",
+      "dependencies": [
+        {
+          "step_definition_id": "delivery_cleanup_retained_files",
+          "mode": "required"
+        }
+      ],
+      "operation": {
+        "operation_id": "delivery.capture-implementation",
+        "version": "1"
+      },
+      "outputs": [
+        {
+          "kind": "file",
+          "output_name": "document",
+          "path": {
+            "kind": "format",
+            "segments": [
+              {
+                "kind": "literal",
+                "text": "artifacts/.flomaster-publication-implementation.json"
+              }
+            ],
+            "data_schema": {
+              "content_digest": "sha256:cd1a463c46d6264134447db17a8c3c7abe5b9a2488c6d759fea66da1f96b133e",
+              "contract": {
+                "schema_name": "PublicationCapturePath",
+                "json_schema": {
+                  "type": "object",
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "artifact_kind": "implementation",
+          "required": true,
+          "max_bytes": 50000000,
+          "media_type": "application/json"
+        }
+      ]
+    },
+    {
+      "kind": "script",
+      "step_definition_id": "delivery_project_publication_paths",
+      "name": "Read captured publication paths",
+      "description": "Read the observer-owned changed-path set from the captured Implementation document.",
+      "executable": ".flomaster/scripts/project_publication_paths.sh",
+      "runtime": "posix_shell",
+      "dependencies": [
+        {
+          "step_definition_id": "delivery_capture_implementation",
+          "mode": "required"
+        }
+      ],
+      "arguments": [
+        {
+          "kind": "format",
+          "segments": [
+            {
+              "kind": "literal",
+              "text": "artifacts/.flomaster-publication-implementation.json"
+            }
+          ],
+          "data_schema": {
+            "content_digest": "sha256:cd1a463c46d6264134447db17a8c3c7abe5b9a2488c6d759fea66da1f96b133e",
+            "contract": {
+              "schema_name": "PublicationCapturePath",
+              "json_schema": {
+                "type": "object",
+                "additionalProperties": false
+              }
+            }
+          }
+        }
+      ],
+      "outputs": [
+        {
+          "kind": "value",
+          "output_name": "paths",
+          "data_schema": {
+            "content_digest": "sha256:baf3f14c5ff42d64c507d09861ae5a99da2e9a79a9da03be3375389a8bc86599",
+            "contract": {
+              "schema_name": "GitStagePaths",
+              "json_schema": {
+                "type": "array",
+                "minItems": 1,
+                "uniqueItems": true,
+                "items": {
+                  "type": "string",
+                  "minLength": 1,
+                  "maxLength": 4096
+                }
+              }
+            }
+          },
+          "required": true
+        },
+        {
+          "kind": "value",
+          "output_name": "path_count",
+          "data_schema": {
+            "content_digest": "sha256:906b40adf99fd9b61dc5b5b1b5346ec9d68a2d5281ad37d8b4258f4ab3a172d9",
+            "contract": {
+              "schema_name": "PublicationPathCount",
+              "json_schema": {
+                "type": "integer",
+                "minimum": 1,
+                "maximum": 10000
+              }
+            }
+          },
+          "required": true
+        }
+      ]
+    },
+    {
+      "kind": "script",
+      "step_definition_id": "delivery_cleanup_implementation",
+      "name": "Clean the Implementation capture file",
+      "description": "Remove the known temporary document after its Artifact bytes are retained.",
+      "executable": ".flomaster/scripts/cleanup_publication_capture.sh",
+      "runtime": "posix_shell",
+      "dependencies": [
+        {
+          "step_definition_id": "delivery_project_publication_paths",
+          "mode": "required"
+        }
+      ],
+      "arguments": [
+        {
+          "kind": "format",
+          "segments": [
+            {
+              "kind": "literal",
+              "text": "artifacts/.flomaster-publication-implementation.json"
+            }
+          ],
+          "data_schema": {
+            "content_digest": "sha256:cd1a463c46d6264134447db17a8c3c7abe5b9a2488c6d759fea66da1f96b133e",
+            "contract": {
+              "schema_name": "PublicationCapturePath",
+              "json_schema": {
+                "type": "object",
+                "additionalProperties": false
+              }
+            }
+          }
+        }
+      ],
+      "outputs": []
+    },
+    {
+      "kind": "agent",
+      "step_definition_id": "review_second_pass",
+      "name": "Review the change again",
+      "description": "Read the change a second time and record the concern it raised as settled or not.",
+      "dependencies": [
+        {
+          "step_definition_id": "delivery_cleanup_implementation",
+          "mode": "required"
+        }
+      ],
+      "agent": {
+        "agent_profile_id": "agent_profile_delivery_review_second_pass",
+        "version": "1"
+      },
+      "runtime": {
+        "runtime_id": "claude_agent_sdk",
+        "sdk_tool_ids": [],
+        "skill_ids": [],
+        "budget": {
+          "max_turns": 4,
+          "max_cost_usd": 0.5
+        },
+        "context_token_budget": 4000
+      },
+      "granted_operations": [],
+      "inputs": [
+        {
+          "input_name": "verdict",
+          "value": {
+            "kind": "upstream_output",
+            "step_definition_id": "review_first_pass",
+            "output_name": "verdict",
+            "data_schema": {
+              "content_digest": "sha256:review-first-pass-verdict",
+              "contract": {
+                "schema_name": "ReviewVerdict",
+                "json_schema": {
+                  "type": "object",
+                  "properties": {
+                    "status": {
+                      "type": "string",
+                      "enum": [
+                        "approved",
+                        "changes_requested"
+                      ]
+                    },
+                    "summary": {
+                      "type": "string",
+                      "maxLength": 2000
+                    },
+                    "finding_id": {
+                      "type": "string",
+                      "maxLength": 200
+                    },
+                    "severity": {
+                      "type": "string",
+                      "enum": [
+                        "skippable",
+                        "technical_debt",
+                        "blocker"
+                      ]
+                    },
+                    "location": {
+                      "type": "string",
+                      "maxLength": 1000
+                    }
+                  },
+                  "required": [
+                    "status",
+                    "summary"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          }
+        }
+      ],
+      "outputs": [
+        {
+          "kind": "value",
+          "output_name": "finding",
+          "data_schema": {
+            "content_digest": "sha256:review-second-pass-finding",
+            "contract": {
+              "schema_name": "ReviewFinding",
+              "json_schema": {
+                "type": "object",
+                "properties": {
+                  "finding_id": {
+                    "type": "string",
+                    "maxLength": 200
+                  },
+                  "severity": {
+                    "type": "string",
+                    "enum": [
+                      "skippable",
+                      "technical_debt",
+                      "blocker"
+                    ]
+                  },
+                  "location": {
+                    "type": "string",
+                    "maxLength": 1000
+                  },
+                  "summary": {
+                    "type": "string",
+                    "maxLength": 2000
+                  },
+                  "resolution": {
+                    "type": "string",
+                    "maxLength": 2000
+                  },
+                  "resolved": {
+                    "type": "boolean"
+                  }
+                },
+                "required": [
+                  "finding_id",
+                  "severity",
+                  "location",
+                  "summary",
+                  "resolution",
+                  "resolved"
+                ],
+                "additionalProperties": false
+              }
+            }
+          },
+          "required": true
+        }
+      ],
+      "evidence": {
+        "kind": "review",
+        "output_name": "finding"
+      },
+      "context": [
+        {
+          "kind": "from",
+          "source": {
+            "kind": "upstream_output",
+            "step_definition_id": "delivery_capture_implementation",
+            "output_name": "document",
+            "data_schema": {
+              "content_digest": "sha256:16c6f4c5875d2e2a0f14d5b1c506f92dd7d970f3d406530dd1cea0258810bf1c",
+              "contract": {
+                "schema_name": "ArtifactReference",
+                "json_schema": {
+                  "$defs": {
+                    "ArtifactId": {
+                      "additionalProperties": false,
+                      "description": "Identify one immutable artifact record.",
+                      "properties": {
+                        "value": {
+                          "maxLength": 200,
+                          "minLength": 3,
+                          "title": "Value",
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "value"
+                      ],
+                      "title": "ArtifactId",
+                      "type": "object"
+                    }
+                  },
+                  "additionalProperties": false,
+                  "description": "Identify one exact immutable artifact version rather than only its family ID.",
+                  "properties": {
+                    "artifact_id": {
+                      "$ref": "#/$defs/ArtifactId"
+                    },
+                    "version": {
+                      "minimum": 1,
+                      "title": "Version",
+                      "type": "integer"
+                    }
+                  },
+                  "required": [
+                    "artifact_id",
+                    "version"
+                  ],
+                  "title": "ArtifactReference",
+                  "type": "object"
+                }
+              }
+            }
+          }
+        }
+      ]
+    },
+    {
+      "kind": "operation",
+      "step_definition_id": "delivery_capture_review",
+      "name": "Capture the publication Review Report",
+      "description": "Capture the publication Review Report from retained runtime facts.",
+      "dependencies": [
+        {
+          "step_definition_id": "review_second_pass",
+          "mode": "required"
+        }
+      ],
+      "operation": {
+        "operation_id": "delivery.capture-review",
+        "version": "1"
+      },
+      "outputs": [
+        {
+          "kind": "file",
+          "output_name": "document",
+          "path": {
+            "kind": "format",
+            "segments": [
+              {
+                "kind": "literal",
+                "text": "artifacts/.flomaster-publication-review.json"
+              }
+            ],
+            "data_schema": {
+              "content_digest": "sha256:cd1a463c46d6264134447db17a8c3c7abe5b9a2488c6d759fea66da1f96b133e",
+              "contract": {
+                "schema_name": "PublicationCapturePath",
+                "json_schema": {
+                  "type": "object",
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "artifact_kind": "review_report",
+          "required": true,
+          "max_bytes": 16777216,
+          "media_type": "application/json"
+        }
+      ]
+    },
+    {
+      "kind": "script",
+      "step_definition_id": "delivery_cleanup_review",
+      "name": "Clean the Review Report capture file",
+      "description": "Remove the known temporary document after its Artifact bytes are retained.",
+      "executable": ".flomaster/scripts/cleanup_publication_capture.sh",
+      "runtime": "posix_shell",
+      "dependencies": [
+        {
+          "step_definition_id": "delivery_capture_review",
+          "mode": "required"
+        }
+      ],
+      "arguments": [
+        {
+          "kind": "format",
+          "segments": [
+            {
+              "kind": "literal",
+              "text": "artifacts/.flomaster-publication-review.json"
+            }
+          ],
+          "data_schema": {
+            "content_digest": "sha256:cd1a463c46d6264134447db17a8c3c7abe5b9a2488c6d759fea66da1f96b133e",
+            "contract": {
+              "schema_name": "PublicationCapturePath",
+              "json_schema": {
+                "type": "object",
+                "additionalProperties": false
+              }
+            }
+          }
+        }
+      ],
+      "outputs": []
+    },
+    {
+      "kind": "script",
+      "step_definition_id": "review_confirm_component",
+      "name": "Run the fast delivery check",
+      "description": "Run the fixture fast check over the changed Workspace and retain its factual result.",
+      "dependencies": [
+        {
+          "step_definition_id": "review_first_pass",
+          "mode": "required"
+        }
+      ],
+      "executable": ".flomaster/scripts/confirm-delivery-check.sh",
+      "runtime": "posix_shell",
+      "arguments": [],
+      "outputs": [
+        {
+          "kind": "value",
+          "output_name": "component_check",
+          "data_schema": {
+            "content_digest": "sha256:review-component-check",
+            "contract": {
+              "schema_name": "ReviewComponentCheck",
+              "json_schema": {
+                "type": "object",
+                "properties": {
+                  "check_name": {
+                    "type": "string",
+                    "maxLength": 300
+                  },
+                  "command": {
+                    "type": "string",
+                    "maxLength": 4096
+                  },
+                  "purpose": {
+                    "type": "string",
+                    "maxLength": 2000
+                  },
+                  "passed": {
+                    "type": "boolean"
+                  },
+                  "summary": {
+                    "type": "string",
+                    "maxLength": 5000
+                  }
+                },
+                "required": [
+                  "check_name",
+                  "command",
+                  "purpose",
+                  "passed",
+                  "summary"
+                ],
+                "additionalProperties": false
+              }
+            }
+          },
+          "required": true
+        }
+      ],
+      "evidence": {
+        "kind": "check",
+        "output_name": "component_check"
+      }
+    },
+    {
+      "kind": "source_control",
+      "step_definition_id": "ship_branch",
+      "name": "Name the Run branch",
+      "description": "Record the branch this Run publishes its change on.",
+      "action": "branch",
+      "inputs": [
+        {
+          "input_name": "name",
+          "value": {
+            "kind": "workspace",
+            "fact": "branch_name",
+            "data_schema": {
+              "content_digest": "sha256:5fddca17fd910d3d6f16011817114f88224aa826a2667d118a49fe09c620b138",
+              "contract": {
+                "schema_name": "GitBranchName",
+                "json_schema": {
+                  "type": "string",
+                  "minLength": 1,
+                  "maxLength": 500
+                }
+              }
+            }
+          }
+        }
+      ],
+      "outputs": [
+        {
+          "kind": "value",
+          "output_name": "branch",
+          "data_schema": {
+            "content_digest": "sha256:12a528c3dc16b83dd142ed43c7233f4d0913cc4cb45c648fcde306cf78336afb",
+            "contract": {
+              "schema_name": "BranchReference",
+              "json_schema": {
+                "$defs": {
+                  "WorkflowRunId": {
+                    "type": "object",
+                    "properties": {
+                      "value": {
+                        "type": "string",
+                        "minLength": 3,
+                        "maxLength": 200
+                      }
+                    },
+                    "required": [
+                      "value"
+                    ],
+                    "additionalProperties": false
+                  }
+                },
+                "type": "object",
+                "properties": {
+                  "repository": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 1000
+                  },
+                  "name": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 500
+                  },
+                  "workflow_run_id": {
+                    "$ref": "#/$defs/WorkflowRunId"
+                  },
+                  "base_revision": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 500
+                  },
+                  "revision": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 500
+                  }
+                },
+                "required": [
+                  "repository",
+                  "name",
+                  "workflow_run_id",
+                  "base_revision",
+                  "revision"
+                ],
+                "additionalProperties": false
+              }
+            }
+          },
+          "required": true
+        }
+      ],
+      "dependencies": [
+        {
+          "step_definition_id": "plan_approve_plan",
+          "mode": "required"
+        }
+      ]
+    },
+    {
+      "kind": "agent",
+      "step_definition_id": "ship_note",
+      "name": "Draft the shipping note",
+      "description": "Write the text of the note that records what is shipping.",
+      "agent": {
+        "agent_profile_id": "agent_profile_ship_note_writer",
+        "version": "1"
+      },
+      "runtime": {
+        "runtime_id": "claude_agent_sdk",
+        "sdk_tool_ids": [],
+        "skill_ids": [],
+        "budget": {
+          "max_turns": 2,
+          "max_cost_usd": 0.5
+        },
+        "context_token_budget": 4000
+      },
+      "granted_operations": [],
+      "dependencies": [
+        {
+          "step_definition_id": "validate_summarize",
+          "mode": "required"
+        }
+      ],
+      "outputs": [
+        {
+          "kind": "value",
+          "output_name": "heading",
+          "data_schema": {
+            "content_digest": "sha256:ship-note-heading",
+            "contract": {
+              "schema_name": "ShipNoteHeading",
+              "json_schema": {
+                "type": "string",
+                "minLength": 4,
+                "maxLength": 120
+              }
+            }
+          },
+          "required": true
+        },
+        {
+          "kind": "value",
+          "output_name": "body",
+          "data_schema": {
+            "content_digest": "sha256:ship-note-body",
+            "contract": {
+              "schema_name": "ShipNoteBody",
+              "json_schema": {
+                "type": "string",
+                "minLength": 20,
+                "maxLength": 2000
+              }
+            }
+          },
+          "required": true
+        }
+      ]
+    },
+    {
+      "kind": "script",
+      "step_definition_id": "ship_write_note",
+      "name": "Write the shipping note file",
+      "description": "Write the drafted note to the one path this pack declares.",
+      "executable": ".flomaster/scripts/write_note.sh",
+      "runtime": "posix_shell",
+      "dependencies": [
+        {
+          "step_definition_id": "ship_note",
+          "mode": "required"
+        }
+      ],
+      "arguments": [
+        {
+          "kind": "format",
+          "segments": [
+            {
+              "kind": "literal",
+              "text": "SHIP-NOTE.md"
+            }
+          ],
+          "data_schema": {
+            "content_digest": "sha256:ship-literal-format",
+            "contract": {
+              "schema_name": "ShipLiteralFormat",
+              "json_schema": {
+                "type": "object",
+                "additionalProperties": false
+              }
+            }
+          }
+        }
+      ],
+      "inputs": [
+        {
+          "input_name": "heading",
+          "value": {
+            "kind": "upstream_output",
+            "step_definition_id": "ship_note",
+            "output_name": "heading",
+            "data_schema": {
+              "content_digest": "sha256:ship-note-heading",
+              "contract": {
+                "schema_name": "ShipNoteHeading",
+                "json_schema": {
+                  "type": "string",
+                  "minLength": 4,
+                  "maxLength": 120
+                }
+              }
+            }
+          }
+        },
+        {
+          "input_name": "body",
+          "value": {
+            "kind": "upstream_output",
+            "step_definition_id": "ship_note",
+            "output_name": "body",
+            "data_schema": {
+              "content_digest": "sha256:ship-note-body",
+              "contract": {
+                "schema_name": "ShipNoteBody",
+                "json_schema": {
+                  "type": "string",
+                  "minLength": 20,
+                  "maxLength": 2000
+                }
+              }
+            }
+          }
+        }
+      ],
+      "outputs": [
+        {
+          "kind": "file",
+          "output_name": "note_file",
+          "path": {
+            "kind": "format",
+            "segments": [
+              {
+                "kind": "literal",
+                "text": "SHIP-NOTE.md"
+              }
+            ],
+            "data_schema": {
+              "content_digest": "sha256:ship-literal-format",
+              "contract": {
+                "schema_name": "ShipLiteralFormat",
+                "json_schema": {
+                  "type": "object",
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "artifact_kind": "documentation",
+          "required": true,
+          "max_bytes": 4096
+        },
+        {
+          "kind": "value",
+          "output_name": "paths",
+          "data_schema": {
+            "content_digest": "sha256:baf3f14c5ff42d64c507d09861ae5a99da2e9a79a9da03be3375389a8bc86599",
+            "contract": {
+              "schema_name": "GitStagePaths",
+              "json_schema": {
+                "type": "array",
+                "minItems": 1,
+                "uniqueItems": true,
+                "items": {
+                  "type": "string",
+                  "minLength": 1,
+                  "maxLength": 4096
+                }
+              }
+            }
+          },
+          "required": true
+        }
+      ]
+    },
+    {
+      "kind": "script",
+      "step_definition_id": "ship_project_base_revision",
+      "name": "Read the reviewed base revision",
+      "description": "Project the exact branch base revision covered by CHANGE approval before staging.",
+      "executable": ".flomaster/scripts/project.sh",
+      "runtime": "posix_shell",
+      "dependencies": [
+        {
+          "step_definition_id": "delivery_cleanup_review",
+          "mode": "required"
+        },
+        {
+          "step_definition_id": "review_confirm_component",
+          "mode": "required"
+        }
+      ],
+      "arguments": [
+        {
+          "kind": "format",
+          "segments": [
+            {
+              "kind": "literal",
+              "text": "base_revision=branch.base_revision"
+            }
+          ],
+          "data_schema": {
+            "content_digest": "sha256:ship-literal-format",
+            "contract": {
+              "schema_name": "ShipLiteralFormat",
+              "json_schema": {
+                "type": "object",
+                "additionalProperties": false
+              }
+            }
+          }
+        },
+        {
+          "kind": "format",
+          "segments": [
+            {
+              "kind": "literal",
+              "text": "branch_name=branch.name"
+            }
+          ],
+          "data_schema": {
+            "content_digest": "sha256:ship-literal-format",
+            "contract": {
+              "schema_name": "ShipLiteralFormat",
+              "json_schema": {
+                "type": "object",
+                "additionalProperties": false
+              }
+            }
+          }
+        }
+      ],
+      "inputs": [
+        {
+          "input_name": "branch",
+          "value": {
+            "kind": "upstream_output",
+            "step_definition_id": "ship_branch",
+            "output_name": "branch",
+            "data_schema": {
+              "content_digest": "sha256:12a528c3dc16b83dd142ed43c7233f4d0913cc4cb45c648fcde306cf78336afb",
+              "contract": {
+                "schema_name": "BranchReference",
+                "json_schema": {
+                  "$defs": {
+                    "WorkflowRunId": {
+                      "type": "object",
+                      "properties": {
+                        "value": {
+                          "type": "string",
+                          "minLength": 3,
+                          "maxLength": 200
+                        }
+                      },
+                      "required": [
+                        "value"
+                      ],
+                      "additionalProperties": false
+                    }
+                  },
+                  "type": "object",
+                  "properties": {
+                    "repository": {
+                      "type": "string",
+                      "minLength": 1,
+                      "maxLength": 1000
+                    },
+                    "name": {
+                      "type": "string",
+                      "minLength": 1,
+                      "maxLength": 500
+                    },
+                    "workflow_run_id": {
+                      "$ref": "#/$defs/WorkflowRunId"
+                    },
+                    "base_revision": {
+                      "type": "string",
+                      "minLength": 1,
+                      "maxLength": 500
+                    },
+                    "revision": {
+                      "type": "string",
+                      "minLength": 1,
+                      "maxLength": 500
+                    }
+                  },
+                  "required": [
+                    "repository",
+                    "name",
+                    "workflow_run_id",
+                    "base_revision",
+                    "revision"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          }
+        }
+      ],
+      "outputs": [
+        {
+          "kind": "value",
+          "output_name": "base_revision",
+          "data_schema": {
+            "content_digest": "sha256:135c7b45130fbf7661af079190c1b4e431cbc15f24fef1f4efccaf5d12dcbbed",
+            "contract": {
+              "schema_name": "GitExpectedHead",
+              "json_schema": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 500,
+                "pattern": "^(?![\\s\\S]*\\s)[\\s\\S]+$"
+              }
+            }
+          },
+          "required": true
+        },
+        {
+          "kind": "value",
+          "output_name": "branch_name",
+          "data_schema": {
+            "content_digest": "sha256:135c7b45130fbf7661af079190c1b4e431cbc15f24fef1f4efccaf5d12dcbbed",
+            "contract": {
+              "schema_name": "GitExpectedHead",
+              "json_schema": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 500,
+                "pattern": "^(?![\\s\\S]*\\s)[\\s\\S]+$"
+              }
+            }
+          },
+          "required": true
+        }
+      ]
+    },
+    {
+      "kind": "human",
+      "step_definition_id": "ship_approve_change",
+      "name": "Approve the reviewed change",
+      "description": "Ask for CHANGE approval over the exact retained review report and pre-publication base revision.",
+      "dependencies": [
+        {
+          "step_definition_id": "ship_project_base_revision",
+          "mode": "required"
+        }
+      ],
+      "decision": {
+        "decision_id": "ship_approve_change",
+        "timing": "after",
+        "approval_class": "change",
+        "prompt": "Approve this reviewed change for publication from the exact base revision?",
+        "subject": {
+          "subject_id": "review_report_artifact",
+          "value": {
+            "kind": "upstream_output",
+            "step_definition_id": "delivery_capture_review",
+            "output_name": "document",
+            "data_schema": {
+              "content_digest": "sha256:16c6f4c5875d2e2a0f14d5b1c506f92dd7d970f3d406530dd1cea0258810bf1c",
+              "contract": {
+                "schema_name": "ArtifactReference",
+                "json_schema": {
+                  "$defs": {
+                    "ArtifactId": {
+                      "additionalProperties": false,
+                      "description": "Identify one immutable artifact record.",
+                      "properties": {
+                        "value": {
+                          "maxLength": 200,
+                          "minLength": 3,
+                          "title": "Value",
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "value"
+                      ],
+                      "title": "ArtifactId",
+                      "type": "object"
+                    }
+                  },
+                  "additionalProperties": false,
+                  "description": "Identify one exact immutable artifact version rather than only its family ID.",
+                  "properties": {
+                    "artifact_id": {
+                      "$ref": "#/$defs/ArtifactId"
+                    },
+                    "version": {
+                      "minimum": 1,
+                      "title": "Version",
+                      "type": "integer"
+                    }
+                  },
+                  "required": [
+                    "artifact_id",
+                    "version"
+                  ],
+                  "title": "ArtifactReference",
+                  "type": "object"
+                }
+              }
+            }
+          },
+          "repository_revision": {
+            "kind": "upstream_output",
+            "step_definition_id": "ship_project_base_revision",
+            "output_name": "base_revision",
+            "data_schema": {
+              "content_digest": "sha256:135c7b45130fbf7661af079190c1b4e431cbc15f24fef1f4efccaf5d12dcbbed",
+              "contract": {
+                "schema_name": "GitExpectedHead",
+                "json_schema": {
+                  "type": "string",
+                  "minLength": 1,
+                  "maxLength": 500,
+                  "pattern": "^(?![\\s\\S]*\\s)[\\s\\S]+$"
+                }
+              }
+            }
+          },
+          "invalidate_when_changed": true
+        },
+        "max_asks": 1
+      },
+      "routes": {
+        "on": "decision",
+        "field": "action",
+        "branches": [
+          {
+            "outcome": "approve",
+            "target_step_definition_ids": [
+              "ship_stage"
+            ]
+          },
+          {
+            "outcome": "reject",
+            "target_step_definition_ids": []
+          },
+          {
+            "outcome": "request_changes",
+            "target_step_definition_ids": []
+          }
+        ],
+        "default_target_step_definition_ids": []
+      }
+    },
+    {
+      "kind": "source_control",
+      "step_definition_id": "ship_stage",
+      "name": "Stage what was written",
+      "description": "Stage exactly the paths the writing Step reports having written.",
+      "action": "stage",
+      "dependencies": [
+        {
+          "step_definition_id": "ship_approve_change",
+          "mode": "required"
+        }
+      ],
+      "inputs": [
+        {
+          "input_name": "paths",
+          "value": {
+            "kind": "upstream_output",
+            "step_definition_id": "delivery_project_publication_paths",
+            "output_name": "paths",
+            "data_schema": {
+              "content_digest": "sha256:baf3f14c5ff42d64c507d09861ae5a99da2e9a79a9da03be3375389a8bc86599",
+              "contract": {
+                "schema_name": "GitStagePaths",
+                "json_schema": {
+                  "type": "array",
+                  "minItems": 1,
+                  "uniqueItems": true,
+                  "items": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 4096
+                  }
+                }
+              }
+            }
+          }
+        }
+      ],
+      "outputs": [
+        {
+          "kind": "value",
+          "output_name": "staged",
+          "data_schema": {
+            "content_digest": "sha256:c3075360354e1924c45f18e9f4b137927d6377d64f4802486b60695647224b46",
+            "contract": {
+              "schema_name": "GitStageResult",
+              "json_schema": {
+                "type": "object",
+                "properties": {
+                  "paths": {
+                    "type": "array",
+                    "minItems": 1,
+                    "uniqueItems": true,
+                    "items": {
+                      "type": "string",
+                      "minLength": 1,
+                      "maxLength": 4096
+                    }
+                  },
+                  "head_revision": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 500,
+                    "pattern": "^(?![\\s\\S]*\\s)[\\s\\S]+$"
+                  }
+                },
+                "required": [
+                  "paths",
+                  "head_revision"
+                ],
+                "additionalProperties": false
+              }
+            }
+          },
+          "required": true
+        }
+      ]
+    },
+    {
+      "kind": "source_control",
+      "step_definition_id": "ship_commit",
+      "name": "Commit the staged change",
+      "description": "Commit what is staged, so the branch carries something to merge.",
+      "action": "commit",
+      "dependencies": [
+        {
+          "step_definition_id": "ship_stage",
+          "mode": "required"
+        }
+      ],
+      "inputs": [
+        {
+          "input_name": "message",
+          "value": {
+            "kind": "literal",
+            "value": "Add the shipping note for this change",
+            "data_schema": {
+              "content_digest": "sha256:b04c2f8290f8b647886aa181f31723ef07c3a61f708e5584efcf5fe2d456470a",
+              "contract": {
+                "schema_name": "GitCommitMessage",
+                "json_schema": {
+                  "type": "string",
+                  "minLength": 1,
+                  "maxLength": 100000,
+                  "pattern": "\\S"
+                }
+              }
+            }
+          }
+        }
+      ],
+      "outputs": [
+        {
+          "kind": "value",
+          "output_name": "committed",
+          "data_schema": {
+            "content_digest": "sha256:075cd535dc545111b773aaf43d273e4d97d42daf4327b22f3baf7f7796dedce7",
+            "contract": {
+              "schema_name": "GitCommitResult",
+              "json_schema": {
+                "$defs": {
+                  "CommitReference": {
+                    "type": "object",
+                    "properties": {
+                      "repository": {
+                        "type": "string",
+                        "minLength": 1,
+                        "maxLength": 1000,
+                        "pattern": "^(?![\\s\\S]*\\s)[\\s\\S]+$"
+                      },
+                      "revision": {
+                        "type": "string",
+                        "minLength": 1,
+                        "maxLength": 500,
+                        "pattern": "^(?![\\s\\S]*\\s)[\\s\\S]+$"
+                      },
+                      "parent_revision": {
+                        "type": "string",
+                        "minLength": 1,
+                        "maxLength": 500,
+                        "pattern": "^(?![\\s\\S]*\\s)[\\s\\S]+$"
+                      }
+                    },
+                    "required": [
+                      "repository",
+                      "revision",
+                      "parent_revision"
+                    ],
+                    "additionalProperties": false
+                  }
+                },
+                "type": "object",
+                "properties": {
+                  "commit": {
+                    "anyOf": [
+                      {
+                        "$ref": "#/$defs/CommitReference"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ]
+                  },
+                  "clean": {
+                    "type": "boolean"
+                  }
+                },
+                "required": [
+                  "commit",
+                  "clean"
+                ],
+                "additionalProperties": false,
+                "oneOf": [
+                  {
+                    "properties": {
+                      "commit": {
+                        "$ref": "#/$defs/CommitReference"
+                      },
+                      "clean": {
+                        "const": false
+                      }
+                    }
+                  },
+                  {
+                    "properties": {
+                      "commit": {
+                        "type": "null"
+                      },
+                      "clean": {
+                        "const": true
+                      }
+                    }
+                  }
+                ]
+              }
+            }
+          },
+          "required": true
+        }
+      ]
+    },
+    {
+      "kind": "script",
+      "step_definition_id": "ship_project_candidate_head",
+      "name": "Read the candidate head",
+      "description": "Project the exact committed candidate revision used by both delivery approvals.",
+      "executable": ".flomaster/scripts/project.sh",
+      "runtime": "posix_shell",
+      "dependencies": [
+        {
+          "step_definition_id": "ship_commit",
+          "mode": "required"
+        }
+      ],
+      "arguments": [
+        {
+          "kind": "format",
+          "segments": [
+            {
+              "kind": "literal",
+              "text": "candidate_head=committed.commit.revision"
+            }
+          ],
+          "data_schema": {
+            "content_digest": "sha256:ship-literal-format",
+            "contract": {
+              "schema_name": "ShipLiteralFormat",
+              "json_schema": {
+                "type": "object",
+                "additionalProperties": false
+              }
+            }
+          }
+        },
+        {
+          "kind": "format",
+          "segments": [
+            {
+              "kind": "literal",
+              "text": "parent_revision=committed.commit.parent_revision"
+            }
+          ],
+          "data_schema": {
+            "content_digest": "sha256:ship-literal-format",
+            "contract": {
+              "schema_name": "ShipLiteralFormat",
+              "json_schema": {
+                "type": "object",
+                "additionalProperties": false
+              }
+            }
+          }
+        }
+      ],
+      "inputs": [
+        {
+          "input_name": "committed",
+          "value": {
+            "kind": "upstream_output",
+            "step_definition_id": "ship_commit",
+            "output_name": "committed",
+            "data_schema": {
+              "content_digest": "sha256:075cd535dc545111b773aaf43d273e4d97d42daf4327b22f3baf7f7796dedce7",
+              "contract": {
+                "schema_name": "GitCommitResult",
+                "json_schema": {
+                  "$defs": {
+                    "CommitReference": {
+                      "type": "object",
+                      "properties": {
+                        "repository": {
+                          "type": "string",
+                          "minLength": 1,
+                          "maxLength": 1000,
+                          "pattern": "^(?![\\s\\S]*\\s)[\\s\\S]+$"
+                        },
+                        "revision": {
+                          "type": "string",
+                          "minLength": 1,
+                          "maxLength": 500,
+                          "pattern": "^(?![\\s\\S]*\\s)[\\s\\S]+$"
+                        },
+                        "parent_revision": {
+                          "type": "string",
+                          "minLength": 1,
+                          "maxLength": 500,
+                          "pattern": "^(?![\\s\\S]*\\s)[\\s\\S]+$"
+                        }
+                      },
+                      "required": [
+                        "repository",
+                        "revision",
+                        "parent_revision"
+                      ],
+                      "additionalProperties": false
+                    }
+                  },
+                  "type": "object",
+                  "properties": {
+                    "commit": {
+                      "anyOf": [
+                        {
+                          "$ref": "#/$defs/CommitReference"
+                        },
+                        {
+                          "type": "null"
+                        }
+                      ]
+                    },
+                    "clean": {
+                      "type": "boolean"
+                    }
+                  },
+                  "required": [
+                    "commit",
+                    "clean"
+                  ],
+                  "additionalProperties": false,
+                  "oneOf": [
+                    {
+                      "properties": {
+                        "commit": {
+                          "$ref": "#/$defs/CommitReference"
+                        },
+                        "clean": {
+                          "const": false
+                        }
+                      }
+                    },
+                    {
+                      "properties": {
+                        "commit": {
+                          "type": "null"
+                        },
+                        "clean": {
+                          "const": true
+                        }
+                      }
+                    }
+                  ]
+                }
+              }
+            }
+          }
+        }
+      ],
+      "outputs": [
+        {
+          "kind": "value",
+          "output_name": "candidate_head",
+          "data_schema": {
+            "content_digest": "sha256:135c7b45130fbf7661af079190c1b4e431cbc15f24fef1f4efccaf5d12dcbbed",
+            "contract": {
+              "schema_name": "GitExpectedHead",
+              "json_schema": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 500,
+                "pattern": "^(?![\\s\\S]*\\s)[\\s\\S]+$"
+              }
+            }
+          },
+          "required": true
+        },
+        {
+          "kind": "value",
+          "output_name": "parent_revision",
+          "data_schema": {
+            "content_digest": "sha256:135c7b45130fbf7661af079190c1b4e431cbc15f24fef1f4efccaf5d12dcbbed",
+            "contract": {
+              "schema_name": "GitExpectedHead",
+              "json_schema": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 500,
+                "pattern": "^(?![\\s\\S]*\\s)[\\s\\S]+$"
+              }
+            }
+          },
+          "required": true
+        }
+      ]
+    },
+    {
+      "kind": "source_control",
+      "step_definition_id": "ship_publish",
+      "name": "Publish the branch",
+      "description": "Push the branch, which a Change Request cannot be opened without.",
+      "action": "push",
+      "dependencies": [
+        {
+          "step_definition_id": "ship_project_candidate_head",
+          "mode": "required"
+        }
+      ],
+      "inputs": [
+        {
+          "input_name": "branch",
+          "value": {
+            "kind": "workspace",
+            "fact": "branch_name",
+            "data_schema": {
+              "content_digest": "sha256:135c7b45130fbf7661af079190c1b4e431cbc15f24fef1f4efccaf5d12dcbbed",
+              "contract": {
+                "schema_name": "GitPushBranch",
+                "json_schema": {
+                  "type": "string",
+                  "minLength": 1,
+                  "maxLength": 500,
+                  "pattern": "^(?![\\s\\S]*\\s)[\\s\\S]+$"
+                }
+              }
+            }
+          }
+        }
+      ],
+      "outputs": [
+        {
+          "kind": "value",
+          "output_name": "published",
+          "data_schema": {
+            "content_digest": "sha256:1b32c0aa7963accdf3e85c1223d899853110637f1bcd0b2e342d8858802d000d",
+            "contract": {
+              "schema_name": "PublishedBranchReference",
+              "json_schema": {
+                "$defs": {
+                  "WorkflowRunId": {
+                    "type": "object",
+                    "properties": {
+                      "value": {
+                        "type": "string",
+                        "minLength": 14,
+                        "maxLength": 200,
+                        "pattern": "^workflow_run_(?![\\s\\S]*\\s)[\\s\\S]+$"
+                      }
+                    },
+                    "required": [
+                      "value"
+                    ],
+                    "additionalProperties": false
+                  }
+                },
+                "type": "object",
+                "properties": {
+                  "repository": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 1000,
+                    "pattern": "^(?![\\s\\S]*\\s)[\\s\\S]+$"
+                  },
+                  "name": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 500,
+                    "pattern": "^(?![\\s\\S]*\\s)[\\s\\S]+$"
+                  },
+                  "workflow_run_id": {
+                    "$ref": "#/$defs/WorkflowRunId"
+                  },
+                  "remote_name": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 500,
+                    "pattern": "^(?![\\s\\S]*\\s)[\\s\\S]+$"
+                  },
+                  "revision": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 500,
+                    "pattern": "^(?![\\s\\S]*\\s)[\\s\\S]+$"
+                  }
+                },
+                "required": [
+                  "repository",
+                  "name",
+                  "workflow_run_id",
+                  "remote_name",
+                  "revision"
+                ],
+                "additionalProperties": false
+              }
+            }
+          },
+          "required": true
+        }
+      ]
+    },
+    {
+      "kind": "agent",
+      "step_definition_id": "ship_pr_text",
+      "name": "Write the Change Request text",
+      "description": "Write the title and body a reviewer reads before approving.",
+      "agent": {
+        "agent_profile_id": "agent_profile_ship_pr_author",
+        "version": "1"
+      },
+      "runtime": {
+        "runtime_id": "claude_agent_sdk",
+        "sdk_tool_ids": [],
+        "skill_ids": [],
+        "budget": {
+          "max_turns": 2,
+          "max_cost_usd": 0.5
+        },
+        "context_token_budget": 4000
+      },
+      "granted_operations": [],
+      "dependencies": [
+        {
+          "step_definition_id": "ship_publish",
+          "mode": "required"
+        }
+      ],
+      "outputs": [
+        {
+          "kind": "value",
+          "output_name": "title",
+          "data_schema": {
+            "content_digest": "sha256:c13cc60f7ae51aacb8d23f05b3e6471d49919a4cc9afffa63c28dea3f66bcb6b",
+            "contract": {
+              "schema_name": "GitOpenPullRequestTitle",
+              "json_schema": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 10000,
+                "pattern": "\\S"
+              }
+            }
+          },
+          "required": true
+        },
+        {
+          "kind": "value",
+          "output_name": "body",
+          "data_schema": {
+            "content_digest": "sha256:17bbdc4c3582b8d814084626023d68c947c193633f5bd6fff7d1bdc4b28bcd06",
+            "contract": {
+              "schema_name": "GitOpenPullRequestBody",
+              "json_schema": {
+                "type": "string",
+                "maxLength": 100000
+              }
+            }
+          },
+          "required": true
+        }
+      ]
+    },
+    {
+      "kind": "source_control",
+      "step_definition_id": "ship_open_pr",
+      "name": "Open the Change Request",
+      "description": "Open one Change Request carrying the text the Agent wrote.",
+      "action": "open_pr",
+      "dependencies": [
+        {
+          "step_definition_id": "ship_pr_text",
+          "mode": "required"
+        }
+      ],
+      "inputs": [
+        {
+          "input_name": "title",
+          "value": {
+            "kind": "upstream_output",
+            "step_definition_id": "ship_pr_text",
+            "output_name": "title",
+            "data_schema": {
+              "content_digest": "sha256:c13cc60f7ae51aacb8d23f05b3e6471d49919a4cc9afffa63c28dea3f66bcb6b",
+              "contract": {
+                "schema_name": "GitOpenPullRequestTitle",
+                "json_schema": {
+                  "type": "string",
+                  "minLength": 1,
+                  "maxLength": 10000,
+                  "pattern": "\\S"
+                }
+              }
+            }
+          }
+        },
+        {
+          "input_name": "body",
+          "value": {
+            "kind": "upstream_output",
+            "step_definition_id": "ship_pr_text",
+            "output_name": "body",
+            "data_schema": {
+              "content_digest": "sha256:17bbdc4c3582b8d814084626023d68c947c193633f5bd6fff7d1bdc4b28bcd06",
+              "contract": {
+                "schema_name": "GitOpenPullRequestBody",
+                "json_schema": {
+                  "type": "string",
+                  "maxLength": 100000
+                }
+              }
+            }
+          }
+        },
+        {
+          "input_name": "base",
+          "value": {
+            "kind": "literal",
+            "value": "main",
+            "data_schema": {
+              "content_digest": "sha256:135c7b45130fbf7661af079190c1b4e431cbc15f24fef1f4efccaf5d12dcbbed",
+              "contract": {
+                "schema_name": "GitOpenPullRequestBase",
+                "json_schema": {
+                  "type": "string",
+                  "minLength": 1,
+                  "maxLength": 500,
+                  "pattern": "^(?![\\s\\S]*\\s)[\\s\\S]+$"
+                }
+              }
+            }
+          }
+        }
+      ],
+      "outputs": [
+        {
+          "kind": "value",
+          "output_name": "change_request",
+          "data_schema": {
+            "content_digest": "sha256:1ce096d1ab2266ecc934226b2fa367512dc033821e47d9a12c96ce7ea7939cd5",
+            "contract": {
+              "schema_name": "ChangeRequestReference",
+              "json_schema": {
+                "$defs": {
+                  "WorkflowRunId": {
+                    "type": "object",
+                    "properties": {
+                      "value": {
+                        "type": "string",
+                        "minLength": 14,
+                        "maxLength": 200,
+                        "pattern": "^workflow_run_(?![\\s\\S]*\\s)[\\s\\S]+$"
+                      }
+                    },
+                    "required": [
+                      "value"
+                    ],
+                    "additionalProperties": false
+                  },
+                  "BranchReference": {
+                    "type": "object",
+                    "properties": {
+                      "repository": {
+                        "type": "string",
+                        "minLength": 1,
+                        "maxLength": 1000,
+                        "pattern": "^(?![\\s\\S]*\\s)[\\s\\S]+$"
+                      },
+                      "name": {
+                        "type": "string",
+                        "minLength": 1,
+                        "maxLength": 500,
+                        "pattern": "^(?![\\s\\S]*\\s)[\\s\\S]+$"
+                      },
+                      "workflow_run_id": {
+                        "$ref": "#/$defs/WorkflowRunId"
+                      },
+                      "base_revision": {
+                        "type": "string",
+                        "minLength": 1,
+                        "maxLength": 500,
+                        "pattern": "^(?![\\s\\S]*\\s)[\\s\\S]+$"
+                      },
+                      "revision": {
+                        "type": "string",
+                        "minLength": 1,
+                        "maxLength": 500,
+                        "pattern": "^(?![\\s\\S]*\\s)[\\s\\S]+$"
+                      }
+                    },
+                    "required": [
+                      "repository",
+                      "name",
+                      "workflow_run_id",
+                      "base_revision",
+                      "revision"
+                    ],
+                    "additionalProperties": false
+                  }
+                },
+                "type": "object",
+                "properties": {
+                  "provider_name": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 100,
+                    "pattern": "^(?![\\s\\S]*\\s)[\\s\\S]+$"
+                  },
+                  "external_id": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 500,
+                    "pattern": "^(?![\\s\\S]*\\s)[\\s\\S]+$"
+                  },
+                  "url": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 4096,
+                    "pattern": "^https?://(?![\\s\\S]*\\s)[\\s\\S]+$"
+                  },
+                  "source_branch": {
+                    "$ref": "#/$defs/BranchReference"
+                  },
+                  "target_branch": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 500,
+                    "pattern": "^(?![\\s\\S]*\\s)[\\s\\S]+$"
+                  }
+                },
+                "required": [
+                  "provider_name",
+                  "external_id",
+                  "url",
+                  "source_branch",
+                  "target_branch"
+                ],
+                "additionalProperties": false
+              }
+            }
+          },
+          "required": true
+        }
+      ]
+    },
+    {
+      "kind": "source_control",
+      "step_definition_id": "ship_wait_checks",
+      "name": "Wait for the checks",
+      "description": "Wait for the Change Request's checks to settle before a person is asked.",
+      "action": "wait_checks",
+      "dependencies": [
+        {
+          "step_definition_id": "ship_open_pr",
+          "mode": "required"
+        }
+      ],
+      "inputs": [
+        {
+          "input_name": "pr",
+          "value": {
+            "kind": "upstream_output",
+            "step_definition_id": "ship_open_pr",
+            "output_name": "change_request",
+            "data_schema": {
+              "content_digest": "sha256:1ce096d1ab2266ecc934226b2fa367512dc033821e47d9a12c96ce7ea7939cd5",
+              "contract": {
+                "schema_name": "ChangeRequestReference",
+                "json_schema": {
+                  "$defs": {
+                    "WorkflowRunId": {
+                      "type": "object",
+                      "properties": {
+                        "value": {
+                          "type": "string",
+                          "minLength": 14,
+                          "maxLength": 200,
+                          "pattern": "^workflow_run_(?![\\s\\S]*\\s)[\\s\\S]+$"
+                        }
+                      },
+                      "required": [
+                        "value"
+                      ],
+                      "additionalProperties": false
+                    },
+                    "BranchReference": {
+                      "type": "object",
+                      "properties": {
+                        "repository": {
+                          "type": "string",
+                          "minLength": 1,
+                          "maxLength": 1000,
+                          "pattern": "^(?![\\s\\S]*\\s)[\\s\\S]+$"
+                        },
+                        "name": {
+                          "type": "string",
+                          "minLength": 1,
+                          "maxLength": 500,
+                          "pattern": "^(?![\\s\\S]*\\s)[\\s\\S]+$"
+                        },
+                        "workflow_run_id": {
+                          "$ref": "#/$defs/WorkflowRunId"
+                        },
+                        "base_revision": {
+                          "type": "string",
+                          "minLength": 1,
+                          "maxLength": 500,
+                          "pattern": "^(?![\\s\\S]*\\s)[\\s\\S]+$"
+                        },
+                        "revision": {
+                          "type": "string",
+                          "minLength": 1,
+                          "maxLength": 500,
+                          "pattern": "^(?![\\s\\S]*\\s)[\\s\\S]+$"
+                        }
+                      },
+                      "required": [
+                        "repository",
+                        "name",
+                        "workflow_run_id",
+                        "base_revision",
+                        "revision"
+                      ],
+                      "additionalProperties": false
+                    }
+                  },
+                  "type": "object",
+                  "properties": {
+                    "provider_name": {
+                      "type": "string",
+                      "minLength": 1,
+                      "maxLength": 100,
+                      "pattern": "^(?![\\s\\S]*\\s)[\\s\\S]+$"
+                    },
+                    "external_id": {
+                      "type": "string",
+                      "minLength": 1,
+                      "maxLength": 500,
+                      "pattern": "^(?![\\s\\S]*\\s)[\\s\\S]+$"
+                    },
+                    "url": {
+                      "type": "string",
+                      "minLength": 1,
+                      "maxLength": 4096,
+                      "pattern": "^https?://(?![\\s\\S]*\\s)[\\s\\S]+$"
+                    },
+                    "source_branch": {
+                      "$ref": "#/$defs/BranchReference"
+                    },
+                    "target_branch": {
+                      "type": "string",
+                      "minLength": 1,
+                      "maxLength": 500,
+                      "pattern": "^(?![\\s\\S]*\\s)[\\s\\S]+$"
+                    }
+                  },
+                  "required": [
+                    "provider_name",
+                    "external_id",
+                    "url",
+                    "source_branch",
+                    "target_branch"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          }
+        },
+        {
+          "input_name": "timeout",
+          "value": {
+            "kind": "literal",
+            "value": 60,
+            "data_schema": {
+              "content_digest": "sha256:4d4b977bdd05938a907672016cdd2d45f42f728d90fa5119492233a41d00781d",
+              "contract": {
+                "schema_name": "GitCheckWaitTimeoutSeconds",
+                "json_schema": {
+                  "type": "integer",
+                  "minimum": 1,
+                  "maximum": 86400
+                }
+              }
+            }
+          }
+        }
+      ],
+      "outputs": [
+        {
+          "kind": "value",
+          "output_name": "outcome",
+          "data_schema": {
+            "content_digest": "sha256:5b0ac896286a4ea62a3ddcc37e23b19e9495195f5a109320f6b0749df449a20c",
+            "contract": {
+              "schema_name": "ChangeRequestCheckOutcome",
+              "json_schema": {
+                "type": "object",
+                "properties": {
+                  "conclusion": {
+                    "type": "string",
+                    "enum": [
+                      "passed",
+                      "failed",
+                      "timed_out"
+                    ]
+                  }
+                },
+                "required": [
+                  "conclusion"
+                ],
+                "additionalProperties": false
+              }
+            }
+          },
+          "required": true
+        },
+        {
+          "kind": "value",
+          "output_name": "report",
+          "data_schema": {
+            "content_digest": "sha256:30deb68c695d8e834d62bf97dfa044b138db0dc24fe792af0e95f40ca5744130",
+            "contract": {
+              "schema_name": "ChangeRequestCheckReport",
+              "json_schema": {
+                "$defs": {
+                  "BranchReference": {
+                    "additionalProperties": false,
+                    "description": "Identify one named branch at an exact observed repository revision.\n\nThis immutable fact is returned by a future Source Control adapter after it has\nobserved a configured repository. It does not select a naming convention, create a\nworktree, or guarantee that the branch remains unchanged after observation.",
+                    "properties": {
+                      "repository": {
+                        "maxLength": 1000,
+                        "minLength": 1,
+                        "title": "Repository",
+                        "type": "string"
+                      },
+                      "name": {
+                        "maxLength": 500,
+                        "minLength": 1,
+                        "title": "Name",
+                        "type": "string"
+                      },
+                      "workflow_run_id": {
+                        "$ref": "#/$defs/WorkflowRunId"
+                      },
+                      "base_revision": {
+                        "maxLength": 500,
+                        "minLength": 1,
+                        "title": "Base Revision",
+                        "type": "string"
+                      },
+                      "revision": {
+                        "maxLength": 500,
+                        "minLength": 1,
+                        "title": "Revision",
+                        "type": "string"
+                      }
+                    },
+                    "required": [
+                      "repository",
+                      "name",
+                      "workflow_run_id",
+                      "base_revision",
+                      "revision"
+                    ],
+                    "title": "BranchReference",
+                    "type": "object"
+                  },
+                  "ChangeRequestCheck": {
+                    "additionalProperties": false,
+                    "description": "Represent one observed provider check without promoting it to assurance evidence.",
+                    "properties": {
+                      "external_id": {
+                        "maxLength": 500,
+                        "minLength": 1,
+                        "title": "External Id",
+                        "type": "string"
+                      },
+                      "reference": {
+                        "$ref": "#/$defs/ChangeRequestReference"
+                      },
+                      "name": {
+                        "maxLength": 500,
+                        "minLength": 1,
+                        "title": "Name",
+                        "type": "string"
+                      },
+                      "state": {
+                        "$ref": "#/$defs/ChangeRequestCheckState"
+                      },
+                      "head_revision": {
+                        "maxLength": 500,
+                        "minLength": 1,
+                        "title": "Head Revision",
+                        "type": "string"
+                      },
+                      "details_url": {
+                        "anyOf": [
+                          {
+                            "maxLength": 4096,
+                            "minLength": 1,
+                            "pattern": "^https?://[^\\s]+$",
+                            "type": "string"
+                          },
+                          {
+                            "type": "null"
+                          }
+                        ],
+                        "default": null,
+                        "title": "Details Url"
+                      },
+                      "started_at": {
+                        "anyOf": [
+                          {
+                            "format": "date-time",
+                            "type": "string"
+                          },
+                          {
+                            "type": "null"
+                          }
+                        ],
+                        "default": null,
+                        "title": "Started At"
+                      },
+                      "completed_at": {
+                        "anyOf": [
+                          {
+                            "format": "date-time",
+                            "type": "string"
+                          },
+                          {
+                            "type": "null"
+                          }
+                        ],
+                        "default": null,
+                        "title": "Completed At"
+                      }
+                    },
+                    "required": [
+                      "external_id",
+                      "reference",
+                      "name",
+                      "state",
+                      "head_revision"
+                    ],
+                    "title": "ChangeRequestCheck",
+                    "type": "object"
+                  },
+                  "ChangeRequestCheckState": {
+                    "description": "Normalize observable CI/check progress without treating it as verification evidence.",
+                    "enum": [
+                      "pending",
+                      "passed",
+                      "failed",
+                      "skipped",
+                      "canceled"
+                    ],
+                    "title": "ChangeRequestCheckState",
+                    "type": "string"
+                  },
+                  "ChangeRequestReference": {
+                    "additionalProperties": false,
+                    "description": "Identify one provider-hosted change request without inferring review or merge state.\n\nThis value links a provider request to its exact source branch and intended target.\nIt does not authenticate the provider, create comments, approve or merge the request,\nor turn provider text into authoritative workflow evidence.",
+                    "properties": {
+                      "provider_name": {
+                        "maxLength": 100,
+                        "minLength": 1,
+                        "title": "Provider Name",
+                        "type": "string"
+                      },
+                      "external_id": {
+                        "maxLength": 500,
+                        "minLength": 1,
+                        "title": "External Id",
+                        "type": "string"
+                      },
+                      "url": {
+                        "maxLength": 4096,
+                        "minLength": 1,
+                        "pattern": "^https?://[^\\s]+$",
+                        "title": "Url",
+                        "type": "string"
+                      },
+                      "source_branch": {
+                        "$ref": "#/$defs/BranchReference"
+                      },
+                      "target_branch": {
+                        "maxLength": 500,
+                        "minLength": 1,
+                        "title": "Target Branch",
+                        "type": "string"
+                      }
+                    },
+                    "required": [
+                      "provider_name",
+                      "external_id",
+                      "url",
+                      "source_branch",
+                      "target_branch"
+                    ],
+                    "title": "ChangeRequestReference",
+                    "type": "object"
+                  },
+                  "WorkflowRunId": {
+                    "additionalProperties": false,
+                    "description": "Identify one durable workflow run.",
+                    "properties": {
+                      "value": {
+                        "maxLength": 200,
+                        "minLength": 3,
+                        "title": "Value",
+                        "type": "string"
+                      }
+                    },
+                    "required": [
+                      "value"
+                    ],
+                    "title": "WorkflowRunId",
+                    "type": "object"
+                  }
+                },
+                "additionalProperties": false,
+                "description": "Retain the exact provider checks a bounded wait observed before it settled.\n\nThe report is the reviewable half of a check wait: it says what was seen, at which\nhead, and never why the wait ended. Keeping it separate from the settled answer lets\na downstream Step consume the observations without also carrying a routing value.",
+                "properties": {
+                  "reference": {
+                    "$ref": "#/$defs/ChangeRequestReference"
+                  },
+                  "head_revision": {
+                    "maxLength": 500,
+                    "minLength": 1,
+                    "title": "Head Revision",
+                    "type": "string"
+                  },
+                  "checks": {
+                    "default": [],
+                    "items": {
+                      "$ref": "#/$defs/ChangeRequestCheck"
+                    },
+                    "title": "Checks",
+                    "type": "array"
+                  }
+                },
+                "required": [
+                  "reference",
+                  "head_revision"
+                ],
+                "title": "ChangeRequestCheckReport",
+                "type": "object"
+              }
+            }
+          },
+          "required": true
+        }
+      ]
+    },
+    {
+      "kind": "human",
+      "step_definition_id": "ship_approve_delivery",
+      "name": "Approve delivery",
+      "description": "Ask for DELIVERY approval over the exact candidate Artifact and head revision.",
+      "dependencies": [
+        {
+          "step_definition_id": "ship_wait_checks",
+          "mode": "required"
+        }
+      ],
+      "decision": {
+        "decision_id": "ship_approve_delivery",
+        "timing": "after",
+        "approval_class": "delivery",
+        "prompt": "Checks have settled. Approve this exact candidate head for merge?",
+        "subject": {
+          "subject_id": "candidate_note_artifact",
+          "value": {
+            "kind": "upstream_output",
+            "step_definition_id": "ship_write_note",
+            "output_name": "note_file",
+            "data_schema": {
+              "content_digest": "sha256:16c6f4c5875d2e2a0f14d5b1c506f92dd7d970f3d406530dd1cea0258810bf1c",
+              "contract": {
+                "schema_name": "ArtifactReference",
+                "json_schema": {
+                  "$defs": {
+                    "ArtifactId": {
+                      "additionalProperties": false,
+                      "description": "Identify one immutable artifact record.",
+                      "properties": {
+                        "value": {
+                          "maxLength": 200,
+                          "minLength": 3,
+                          "title": "Value",
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "value"
+                      ],
+                      "title": "ArtifactId",
+                      "type": "object"
+                    }
+                  },
+                  "additionalProperties": false,
+                  "description": "Identify one exact immutable artifact version rather than only its family ID.",
+                  "properties": {
+                    "artifact_id": {
+                      "$ref": "#/$defs/ArtifactId"
+                    },
+                    "version": {
+                      "minimum": 1,
+                      "title": "Version",
+                      "type": "integer"
+                    }
+                  },
+                  "required": [
+                    "artifact_id",
+                    "version"
+                  ],
+                  "title": "ArtifactReference",
+                  "type": "object"
+                }
+              }
+            }
+          },
+          "repository_revision": {
+            "kind": "upstream_output",
+            "step_definition_id": "ship_project_candidate_head",
+            "output_name": "candidate_head",
+            "data_schema": {
+              "content_digest": "sha256:135c7b45130fbf7661af079190c1b4e431cbc15f24fef1f4efccaf5d12dcbbed",
+              "contract": {
+                "schema_name": "GitExpectedHead",
+                "json_schema": {
+                  "type": "string",
+                  "minLength": 1,
+                  "maxLength": 500,
+                  "pattern": "^(?![\\s\\S]*\\s)[\\s\\S]+$"
+                }
+              }
+            }
+          },
+          "invalidate_when_changed": true
+        },
+        "max_asks": 1
+      },
+      "routes": {
+        "on": "decision",
+        "field": "action",
+        "branches": [
+          {
+            "outcome": "approve",
+            "target_step_definition_ids": [
+              "ship_project_number"
+            ]
+          },
+          {
+            "outcome": "reject",
+            "target_step_definition_ids": []
+          },
+          {
+            "outcome": "request_changes",
+            "target_step_definition_ids": []
+          }
+        ],
+        "default_target_step_definition_ids": []
+      }
+    },
+    {
+      "kind": "script",
+      "step_definition_id": "ship_project_number",
+      "name": "Read the Change Request number",
+      "description": "Project the number and head revision the merge needs out of the reference.",
+      "executable": ".flomaster/scripts/project.sh",
+      "runtime": "posix_shell",
+      "dependencies": [
+        {
+          "step_definition_id": "ship_approve_delivery",
+          "mode": "required"
+        }
+      ],
+      "arguments": [
+        {
+          "kind": "format",
+          "segments": [
+            {
+              "kind": "literal",
+              "text": "number=change_request.external_id"
+            }
+          ],
+          "data_schema": {
+            "content_digest": "sha256:ship-literal-format",
+            "contract": {
+              "schema_name": "ShipLiteralFormat",
+              "json_schema": {
+                "type": "object",
+                "additionalProperties": false
+              }
+            }
+          }
+        },
+        {
+          "kind": "format",
+          "segments": [
+            {
+              "kind": "literal",
+              "text": "expected_head=change_request.source_branch.revision"
+            }
+          ],
+          "data_schema": {
+            "content_digest": "sha256:ship-literal-format",
+            "contract": {
+              "schema_name": "ShipLiteralFormat",
+              "json_schema": {
+                "type": "object",
+                "additionalProperties": false
+              }
+            }
+          }
+        }
+      ],
+      "inputs": [
+        {
+          "input_name": "change_request",
+          "value": {
+            "kind": "upstream_output",
+            "step_definition_id": "ship_open_pr",
+            "output_name": "change_request",
+            "data_schema": {
+              "content_digest": "sha256:1ce096d1ab2266ecc934226b2fa367512dc033821e47d9a12c96ce7ea7939cd5",
+              "contract": {
+                "schema_name": "ChangeRequestReference",
+                "json_schema": {
+                  "$defs": {
+                    "WorkflowRunId": {
+                      "type": "object",
+                      "properties": {
+                        "value": {
+                          "type": "string",
+                          "minLength": 14,
+                          "maxLength": 200,
+                          "pattern": "^workflow_run_(?![\\s\\S]*\\s)[\\s\\S]+$"
+                        }
+                      },
+                      "required": [
+                        "value"
+                      ],
+                      "additionalProperties": false
+                    },
+                    "BranchReference": {
+                      "type": "object",
+                      "properties": {
+                        "repository": {
+                          "type": "string",
+                          "minLength": 1,
+                          "maxLength": 1000,
+                          "pattern": "^(?![\\s\\S]*\\s)[\\s\\S]+$"
+                        },
+                        "name": {
+                          "type": "string",
+                          "minLength": 1,
+                          "maxLength": 500,
+                          "pattern": "^(?![\\s\\S]*\\s)[\\s\\S]+$"
+                        },
+                        "workflow_run_id": {
+                          "$ref": "#/$defs/WorkflowRunId"
+                        },
+                        "base_revision": {
+                          "type": "string",
+                          "minLength": 1,
+                          "maxLength": 500,
+                          "pattern": "^(?![\\s\\S]*\\s)[\\s\\S]+$"
+                        },
+                        "revision": {
+                          "type": "string",
+                          "minLength": 1,
+                          "maxLength": 500,
+                          "pattern": "^(?![\\s\\S]*\\s)[\\s\\S]+$"
+                        }
+                      },
+                      "required": [
+                        "repository",
+                        "name",
+                        "workflow_run_id",
+                        "base_revision",
+                        "revision"
+                      ],
+                      "additionalProperties": false
+                    }
+                  },
+                  "type": "object",
+                  "properties": {
+                    "provider_name": {
+                      "type": "string",
+                      "minLength": 1,
+                      "maxLength": 100,
+                      "pattern": "^(?![\\s\\S]*\\s)[\\s\\S]+$"
+                    },
+                    "external_id": {
+                      "type": "string",
+                      "minLength": 1,
+                      "maxLength": 500,
+                      "pattern": "^(?![\\s\\S]*\\s)[\\s\\S]+$"
+                    },
+                    "url": {
+                      "type": "string",
+                      "minLength": 1,
+                      "maxLength": 4096,
+                      "pattern": "^https?://(?![\\s\\S]*\\s)[\\s\\S]+$"
+                    },
+                    "source_branch": {
+                      "$ref": "#/$defs/BranchReference"
+                    },
+                    "target_branch": {
+                      "type": "string",
+                      "minLength": 1,
+                      "maxLength": 500,
+                      "pattern": "^(?![\\s\\S]*\\s)[\\s\\S]+$"
+                    }
+                  },
+                  "required": [
+                    "provider_name",
+                    "external_id",
+                    "url",
+                    "source_branch",
+                    "target_branch"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          }
+        }
+      ],
+      "outputs": [
+        {
+          "kind": "value",
+          "output_name": "number",
+          "data_schema": {
+            "content_digest": "sha256:2e970817baa1f2b5a102ccf9cf44f7bd58a74e9825baae53c8fef85c9563ff0a",
+            "contract": {
+              "schema_name": "GitChangeRequestNumber",
+              "json_schema": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 500,
+                "pattern": "^[1-9][0-9]*$"
+              }
+            }
+          },
+          "required": true
+        },
+        {
+          "kind": "value",
+          "output_name": "expected_head",
+          "data_schema": {
+            "content_digest": "sha256:135c7b45130fbf7661af079190c1b4e431cbc15f24fef1f4efccaf5d12dcbbed",
+            "contract": {
+              "schema_name": "GitExpectedHead",
+              "json_schema": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 500,
+                "pattern": "^(?![\\s\\S]*\\s)[\\s\\S]+$"
+              }
+            }
+          },
+          "required": true
+        }
+      ]
+    },
+    {
+      "kind": "source_control",
+      "step_definition_id": "ship_merge",
+      "name": "Merge the Change Request",
+      "description": "Merge the approved Change Request at the revision that was checked.",
+      "action": "merge",
+      "dependencies": [
+        {
+          "step_definition_id": "ship_project_number",
+          "mode": "required"
+        }
+      ],
+      "inputs": [
+        {
+          "input_name": "number",
+          "value": {
+            "kind": "upstream_output",
+            "step_definition_id": "ship_project_number",
+            "output_name": "number",
+            "data_schema": {
+              "content_digest": "sha256:2e970817baa1f2b5a102ccf9cf44f7bd58a74e9825baae53c8fef85c9563ff0a",
+              "contract": {
+                "schema_name": "GitChangeRequestNumber",
+                "json_schema": {
+                  "type": "string",
+                  "minLength": 1,
+                  "maxLength": 500,
+                  "pattern": "^[1-9][0-9]*$"
+                }
+              }
+            }
+          }
+        },
+        {
+          "input_name": "expected_head",
+          "value": {
+            "kind": "upstream_output",
+            "step_definition_id": "ship_project_number",
+            "output_name": "expected_head",
+            "data_schema": {
+              "content_digest": "sha256:135c7b45130fbf7661af079190c1b4e431cbc15f24fef1f4efccaf5d12dcbbed",
+              "contract": {
+                "schema_name": "GitExpectedHead",
+                "json_schema": {
+                  "type": "string",
+                  "minLength": 1,
+                  "maxLength": 500,
+                  "pattern": "^(?![\\s\\S]*\\s)[\\s\\S]+$"
+                }
+              }
+            }
+          }
+        }
+      ],
+      "outputs": [
+        {
+          "kind": "value",
+          "output_name": "merged",
+          "data_schema": {
+            "content_digest": "sha256:9e08c674c53a8f448dc487a6767f14ac47e9b9f0f11b18bb404f0b2096ce01b1",
+            "contract": {
+              "schema_name": "CommitReference",
+              "json_schema": {
+                "additionalProperties": false,
+                "description": "Identify one immutable commit without asserting verification or delivery success.\n\nA future adapter returns this only from an observed provider or Git result. The\nreference does not contain changed files, checks, approval state, or a claim that a\nworkflow can transition because that evidence belongs to separate contracts.",
+                "properties": {
+                  "repository": {
+                    "maxLength": 1000,
+                    "minLength": 1,
+                    "title": "Repository",
+                    "type": "string"
+                  },
+                  "revision": {
+                    "maxLength": 500,
+                    "minLength": 1,
+                    "title": "Revision",
+                    "type": "string"
+                  },
+                  "parent_revision": {
+                    "maxLength": 500,
+                    "minLength": 1,
+                    "title": "Parent Revision",
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "repository",
+                  "revision",
+                  "parent_revision"
+                ],
+                "title": "CommitReference",
+                "type": "object"
+              }
+            }
+          },
+          "required": true
+        }
+      ]
+    },
+    {
+      "step_definition_id": "close_record_merge",
+      "name": "Record that the change merged",
+      "description": "Move the admitted Work Item to the state that says its change is in, so the closing note is written from a ticket that already carries that fact.",
+      "inputs": [
+        {
+          "input_name": "id",
+          "value": {
+            "kind": "work_item",
+            "field": "reference",
+            "data_schema": {
+              "content_digest": "sha256:8964c31cef243ee9c4419f51e52a90efb43965f49dd8971905df8f1a955ddf0b",
+              "contract": {
+                "schema_name": "WorkItemReference",
+                "json_schema": {
+                  "type": "object",
+                  "properties": {
+                    "provider_name": {
+                      "type": "string",
+                      "minLength": 1,
+                      "maxLength": 100
+                    },
+                    "external_id": {
+                      "type": "string",
+                      "minLength": 1,
+                      "maxLength": 500
+                    },
+                    "url": {
+                      "anyOf": [
+                        {
+                          "type": "string",
+                          "minLength": 1,
+                          "maxLength": 4096
+                        },
+                        {
+                          "type": "null"
+                        }
+                      ]
+                    }
+                  },
+                  "required": [
+                    "provider_name",
+                    "external_id"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          }
+        },
+        {
+          "input_name": "state",
+          "value": {
+            "kind": "literal",
+            "value": "merged",
+            "data_schema": {
+              "content_digest": "sha256:969a792f7c16f5a0b1ccf42ee44b1d10198478572371666d4307e6437dff4f5a",
+              "contract": {
+                "schema_name": "TrackerState",
+                "json_schema": {
+                  "type": "string",
+                  "minLength": 1,
+                  "maxLength": 200,
+                  "pattern": "\\S"
+                }
+              }
+            }
+          }
+        },
+        {
+          "input_name": "reason",
+          "value": {
+            "kind": "literal",
+            "value": "The change for this Work Item merged into the target branch.",
+            "data_schema": {
+              "content_digest": "sha256:574bb972a9043f5f048277cca137332e61039b7390202bead2c22ca483701cca",
+              "contract": {
+                "schema_name": "TrackerTransitionReason",
+                "json_schema": {
+                  "type": "string",
+                  "minLength": 1,
+                  "maxLength": 100000
+                }
+              }
+            }
+          }
+        }
+      ],
+      "outputs": [
+        {
+          "kind": "value",
+          "output_name": "work_item",
+          "data_schema": {
+            "content_digest": "sha256:4bd535a4de2f251d69b3e2acf87e254c6a47e8fddf4c3b55157b1ffb2e8f9f5e",
+            "contract": {
+              "schema_name": "WorkItem",
+              "json_schema": {
+                "$defs": {
+                  "WorkItemId": {
+                    "additionalProperties": false,
+                    "description": "Identify one provider-neutral work item.",
+                    "properties": {
+                      "value": {
+                        "maxLength": 200,
+                        "minLength": 3,
+                        "title": "Value",
+                        "type": "string"
+                      }
+                    },
+                    "required": [
+                      "value"
+                    ],
+                    "title": "WorkItemId",
+                    "type": "object"
+                  },
+                  "WorkItemReference": {
+                    "additionalProperties": false,
+                    "description": "Identify one provider object without embedding provider SDK data or credentials.\n\nThis is a domain value observed by intake and writeback ports. Its provider name and\nexternal key are stable correlation facts; it does not prove that the remote item\ncurrently exists or that the URL was fetched.",
+                    "properties": {
+                      "provider_name": {
+                        "maxLength": 100,
+                        "minLength": 1,
+                        "title": "Provider Name",
+                        "type": "string"
+                      },
+                      "external_id": {
+                        "maxLength": 500,
+                        "minLength": 1,
+                        "title": "External Id",
+                        "type": "string"
+                      },
+                      "url": {
+                        "anyOf": [
+                          {
+                            "maxLength": 4096,
+                            "minLength": 1,
+                            "type": "string"
+                          },
+                          {
+                            "type": "null"
+                          }
+                        ],
+                        "default": null,
+                        "title": "Url"
+                      }
+                    },
+                    "required": [
+                      "provider_name",
+                      "external_id"
+                    ],
+                    "title": "WorkItemReference",
+                    "type": "object"
+                  }
+                },
+                "additionalProperties": false,
+                "description": "Capture the latest normalized provider facts relevant to workflow intake.\n\nA source adapter replaces this immutable snapshot after loading it. The model owns\nno routing decision, provider status mapping, or claim side effect. Application\nservices decide whether an item is claimable from the explicit revision, assignment,\nplanning, and relationship facts below; adapters do not hide that policy in a\nprovider-specific claim convention.",
+                "properties": {
+                  "work_item_id": {
+                    "$ref": "#/$defs/WorkItemId"
+                  },
+                  "reference": {
+                    "$ref": "#/$defs/WorkItemReference"
+                  },
+                  "title": {
+                    "maxLength": 1000,
+                    "minLength": 1,
+                    "title": "Title",
+                    "type": "string"
+                  },
+                  "body": {
+                    "default": "",
+                    "maxLength": 100000,
+                    "title": "Body",
+                    "type": "string"
+                  },
+                  "state": {
+                    "maxLength": 200,
+                    "minLength": 1,
+                    "title": "State",
+                    "type": "string"
+                  },
+                  "labels": {
+                    "default": [],
+                    "items": {
+                      "type": "string"
+                    },
+                    "title": "Labels",
+                    "type": "array"
+                  },
+                  "repository_reference": {
+                    "anyOf": [
+                      {
+                        "maxLength": 1000,
+                        "minLength": 1,
+                        "type": "string"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ],
+                    "default": null,
+                    "title": "Repository Reference"
+                  },
+                  "provider_revision": {
+                    "maxLength": 500,
+                    "minLength": 1,
+                    "title": "Provider Revision",
+                    "type": "string"
+                  },
+                  "assignees": {
+                    "default": [],
+                    "items": {
+                      "type": "string"
+                    },
+                    "title": "Assignees",
+                    "type": "array"
+                  },
+                  "parent": {
+                    "anyOf": [
+                      {
+                        "$ref": "#/$defs/WorkItemReference"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ],
+                    "default": null
+                  },
+                  "blocked_by": {
+                    "default": [],
+                    "items": {
+                      "$ref": "#/$defs/WorkItemReference"
+                    },
+                    "title": "Blocked By",
+                    "type": "array"
+                  },
+                  "blocking": {
+                    "default": [],
+                    "items": {
+                      "$ref": "#/$defs/WorkItemReference"
+                    },
+                    "title": "Blocking",
+                    "type": "array"
+                  },
+                  "priority": {
+                    "anyOf": [
+                      {
+                        "maxLength": 100,
+                        "minLength": 1,
+                        "type": "string"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ],
+                    "default": null,
+                    "title": "Priority"
+                  },
+                  "timebox": {
+                    "anyOf": [
+                      {
+                        "maxLength": 200,
+                        "minLength": 1,
+                        "type": "string"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ],
+                    "default": null,
+                    "title": "Timebox"
+                  },
+                  "project": {
+                    "anyOf": [
+                      {
+                        "maxLength": 500,
+                        "minLength": 1,
+                        "type": "string"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ],
+                    "default": null,
+                    "title": "Project"
+                  },
+                  "estimate_points": {
+                    "anyOf": [
+                      {
+                        "maximum": 8,
+                        "minimum": 0,
+                        "type": "integer"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ],
+                    "default": null,
+                    "title": "Estimate Points"
+                  },
+                  "updated_at": {
+                    "format": "date-time",
+                    "title": "Updated At",
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "work_item_id",
+                  "reference",
+                  "title",
+                  "state",
+                  "provider_revision",
+                  "updated_at"
+                ],
+                "title": "WorkItem",
+                "type": "object"
+              }
+            }
+          },
+          "required": true
+        }
+      ],
+      "failure_policy": {
+        "behavior": "halt"
+      },
+      "kind": "work_item_tracker",
+      "action": "transition",
+      "dependencies": [
+        {
+          "step_definition_id": "ship_merge",
+          "mode": "required"
+        }
+      ]
+    },
+    {
+      "step_definition_id": "close_summarize",
+      "name": "Write the closing note",
+      "description": "Read the Work Item as it stands after the merge was recorded, then return the state it closes in and the note a reader gets instead of the run.",
+      "dependencies": [
+        {
+          "step_definition_id": "close_record_merge",
+          "mode": "required"
+        }
+      ],
+      "inputs": [
+        {
+          "input_name": "work_item",
+          "value": {
+            "kind": "upstream_output",
+            "step_definition_id": "close_record_merge",
+            "output_name": "work_item",
+            "data_schema": {
+              "content_digest": "sha256:4bd535a4de2f251d69b3e2acf87e254c6a47e8fddf4c3b55157b1ffb2e8f9f5e",
+              "contract": {
+                "schema_name": "WorkItem",
+                "json_schema": {
+                  "$defs": {
+                    "WorkItemId": {
+                      "additionalProperties": false,
+                      "description": "Identify one provider-neutral work item.",
+                      "properties": {
+                        "value": {
+                          "maxLength": 200,
+                          "minLength": 3,
+                          "title": "Value",
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "value"
+                      ],
+                      "title": "WorkItemId",
+                      "type": "object"
+                    },
+                    "WorkItemReference": {
+                      "additionalProperties": false,
+                      "description": "Identify one provider object without embedding provider SDK data or credentials.\n\nThis is a domain value observed by intake and writeback ports. Its provider name and\nexternal key are stable correlation facts; it does not prove that the remote item\ncurrently exists or that the URL was fetched.",
+                      "properties": {
+                        "provider_name": {
+                          "maxLength": 100,
+                          "minLength": 1,
+                          "title": "Provider Name",
+                          "type": "string"
+                        },
+                        "external_id": {
+                          "maxLength": 500,
+                          "minLength": 1,
+                          "title": "External Id",
+                          "type": "string"
+                        },
+                        "url": {
+                          "anyOf": [
+                            {
+                              "maxLength": 4096,
+                              "minLength": 1,
+                              "type": "string"
+                            },
+                            {
+                              "type": "null"
+                            }
+                          ],
+                          "default": null,
+                          "title": "Url"
+                        }
+                      },
+                      "required": [
+                        "provider_name",
+                        "external_id"
+                      ],
+                      "title": "WorkItemReference",
+                      "type": "object"
+                    }
+                  },
+                  "additionalProperties": false,
+                  "description": "Capture the latest normalized provider facts relevant to workflow intake.\n\nA source adapter replaces this immutable snapshot after loading it. The model owns\nno routing decision, provider status mapping, or claim side effect. Application\nservices decide whether an item is claimable from the explicit revision, assignment,\nplanning, and relationship facts below; adapters do not hide that policy in a\nprovider-specific claim convention.",
+                  "properties": {
+                    "work_item_id": {
+                      "$ref": "#/$defs/WorkItemId"
+                    },
+                    "reference": {
+                      "$ref": "#/$defs/WorkItemReference"
+                    },
+                    "title": {
+                      "maxLength": 1000,
+                      "minLength": 1,
+                      "title": "Title",
+                      "type": "string"
+                    },
+                    "body": {
+                      "default": "",
+                      "maxLength": 100000,
+                      "title": "Body",
+                      "type": "string"
+                    },
+                    "state": {
+                      "maxLength": 200,
+                      "minLength": 1,
+                      "title": "State",
+                      "type": "string"
+                    },
+                    "labels": {
+                      "default": [],
+                      "items": {
+                        "type": "string"
+                      },
+                      "title": "Labels",
+                      "type": "array"
+                    },
+                    "repository_reference": {
+                      "anyOf": [
+                        {
+                          "maxLength": 1000,
+                          "minLength": 1,
+                          "type": "string"
+                        },
+                        {
+                          "type": "null"
+                        }
+                      ],
+                      "default": null,
+                      "title": "Repository Reference"
+                    },
+                    "provider_revision": {
+                      "maxLength": 500,
+                      "minLength": 1,
+                      "title": "Provider Revision",
+                      "type": "string"
+                    },
+                    "assignees": {
+                      "default": [],
+                      "items": {
+                        "type": "string"
+                      },
+                      "title": "Assignees",
+                      "type": "array"
+                    },
+                    "parent": {
+                      "anyOf": [
+                        {
+                          "$ref": "#/$defs/WorkItemReference"
+                        },
+                        {
+                          "type": "null"
+                        }
+                      ],
+                      "default": null
+                    },
+                    "blocked_by": {
+                      "default": [],
+                      "items": {
+                        "$ref": "#/$defs/WorkItemReference"
+                      },
+                      "title": "Blocked By",
+                      "type": "array"
+                    },
+                    "blocking": {
+                      "default": [],
+                      "items": {
+                        "$ref": "#/$defs/WorkItemReference"
+                      },
+                      "title": "Blocking",
+                      "type": "array"
+                    },
+                    "priority": {
+                      "anyOf": [
+                        {
+                          "maxLength": 100,
+                          "minLength": 1,
+                          "type": "string"
+                        },
+                        {
+                          "type": "null"
+                        }
+                      ],
+                      "default": null,
+                      "title": "Priority"
+                    },
+                    "timebox": {
+                      "anyOf": [
+                        {
+                          "maxLength": 200,
+                          "minLength": 1,
+                          "type": "string"
+                        },
+                        {
+                          "type": "null"
+                        }
+                      ],
+                      "default": null,
+                      "title": "Timebox"
+                    },
+                    "project": {
+                      "anyOf": [
+                        {
+                          "maxLength": 500,
+                          "minLength": 1,
+                          "type": "string"
+                        },
+                        {
+                          "type": "null"
+                        }
+                      ],
+                      "default": null,
+                      "title": "Project"
+                    },
+                    "estimate_points": {
+                      "anyOf": [
+                        {
+                          "maximum": 8,
+                          "minimum": 0,
+                          "type": "integer"
+                        },
+                        {
+                          "type": "null"
+                        }
+                      ],
+                      "default": null,
+                      "title": "Estimate Points"
+                    },
+                    "updated_at": {
+                      "format": "date-time",
+                      "title": "Updated At",
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "work_item_id",
+                    "reference",
+                    "title",
+                    "state",
+                    "provider_revision",
+                    "updated_at"
+                  ],
+                  "title": "WorkItem",
+                  "type": "object"
+                }
+              }
+            }
+          }
+        }
+      ],
+      "outputs": [
+        {
+          "kind": "value",
+          "output_name": "state",
+          "data_schema": {
+            "content_digest": "sha256:969a792f7c16f5a0b1ccf42ee44b1d10198478572371666d4307e6437dff4f5a",
+            "contract": {
+              "schema_name": "TrackerState",
+              "json_schema": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 200,
+                "pattern": "\\S"
+              }
+            }
+          },
+          "required": true
+        },
+        {
+          "kind": "value",
+          "output_name": "note",
+          "data_schema": {
+            "content_digest": "sha256:574bb972a9043f5f048277cca137332e61039b7390202bead2c22ca483701cca",
+            "contract": {
+              "schema_name": "TrackerCommentNote",
+              "json_schema": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 100000
+              }
+            }
+          },
+          "required": true
+        }
+      ],
+      "failure_policy": {
+        "behavior": "halt"
+      },
+      "kind": "agent",
+      "agent": {
+        "agent_profile_id": "agent_profile_close_reporter",
+        "version": "1"
+      },
+      "runtime": {
+        "runtime_id": "claude_agent_sdk",
+        "budget": {
+          "max_cost_usd": 0.5,
+          "max_turns": 2
+        },
+        "context_token_budget": 4000
+      }
+    },
+    {
+      "step_definition_id": "close_close_ticket",
+      "name": "Close the ticket",
+      "description": "Move the same Work Item to the closing state the reporter returned, so the ticket ends where this phase says it ended.",
+      "dependencies": [
+        {
+          "step_definition_id": "close_summarize",
+          "mode": "required"
+        }
+      ],
+      "inputs": [
+        {
+          "input_name": "id",
+          "value": {
+            "kind": "work_item",
+            "field": "reference",
+            "data_schema": {
+              "content_digest": "sha256:8964c31cef243ee9c4419f51e52a90efb43965f49dd8971905df8f1a955ddf0b",
+              "contract": {
+                "schema_name": "WorkItemReference",
+                "json_schema": {
+                  "type": "object",
+                  "properties": {
+                    "provider_name": {
+                      "type": "string",
+                      "minLength": 1,
+                      "maxLength": 100
+                    },
+                    "external_id": {
+                      "type": "string",
+                      "minLength": 1,
+                      "maxLength": 500
+                    },
+                    "url": {
+                      "anyOf": [
+                        {
+                          "type": "string",
+                          "minLength": 1,
+                          "maxLength": 4096
+                        },
+                        {
+                          "type": "null"
+                        }
+                      ]
+                    }
+                  },
+                  "required": [
+                    "provider_name",
+                    "external_id"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          }
+        },
+        {
+          "input_name": "state",
+          "value": {
+            "kind": "upstream_output",
+            "step_definition_id": "close_summarize",
+            "output_name": "state",
+            "data_schema": {
+              "content_digest": "sha256:969a792f7c16f5a0b1ccf42ee44b1d10198478572371666d4307e6437dff4f5a",
+              "contract": {
+                "schema_name": "TrackerState",
+                "json_schema": {
+                  "type": "string",
+                  "minLength": 1,
+                  "maxLength": 200,
+                  "pattern": "\\S"
+                }
+              }
+            }
+          }
+        },
+        {
+          "input_name": "reason",
+          "value": {
+            "kind": "literal",
+            "value": "The close phase finished, so the Work Item needs no more work.",
+            "data_schema": {
+              "content_digest": "sha256:574bb972a9043f5f048277cca137332e61039b7390202bead2c22ca483701cca",
+              "contract": {
+                "schema_name": "TrackerTransitionReason",
+                "json_schema": {
+                  "type": "string",
+                  "minLength": 1,
+                  "maxLength": 100000
+                }
+              }
+            }
+          }
+        }
+      ],
+      "outputs": [
+        {
+          "kind": "value",
+          "output_name": "work_item",
+          "data_schema": {
+            "content_digest": "sha256:4bd535a4de2f251d69b3e2acf87e254c6a47e8fddf4c3b55157b1ffb2e8f9f5e",
+            "contract": {
+              "schema_name": "WorkItem",
+              "json_schema": {
+                "$defs": {
+                  "WorkItemId": {
+                    "additionalProperties": false,
+                    "description": "Identify one provider-neutral work item.",
+                    "properties": {
+                      "value": {
+                        "maxLength": 200,
+                        "minLength": 3,
+                        "title": "Value",
+                        "type": "string"
+                      }
+                    },
+                    "required": [
+                      "value"
+                    ],
+                    "title": "WorkItemId",
+                    "type": "object"
+                  },
+                  "WorkItemReference": {
+                    "additionalProperties": false,
+                    "description": "Identify one provider object without embedding provider SDK data or credentials.\n\nThis is a domain value observed by intake and writeback ports. Its provider name and\nexternal key are stable correlation facts; it does not prove that the remote item\ncurrently exists or that the URL was fetched.",
+                    "properties": {
+                      "provider_name": {
+                        "maxLength": 100,
+                        "minLength": 1,
+                        "title": "Provider Name",
+                        "type": "string"
+                      },
+                      "external_id": {
+                        "maxLength": 500,
+                        "minLength": 1,
+                        "title": "External Id",
+                        "type": "string"
+                      },
+                      "url": {
+                        "anyOf": [
+                          {
+                            "maxLength": 4096,
+                            "minLength": 1,
+                            "type": "string"
+                          },
+                          {
+                            "type": "null"
+                          }
+                        ],
+                        "default": null,
+                        "title": "Url"
+                      }
+                    },
+                    "required": [
+                      "provider_name",
+                      "external_id"
+                    ],
+                    "title": "WorkItemReference",
+                    "type": "object"
+                  }
+                },
+                "additionalProperties": false,
+                "description": "Capture the latest normalized provider facts relevant to workflow intake.\n\nA source adapter replaces this immutable snapshot after loading it. The model owns\nno routing decision, provider status mapping, or claim side effect. Application\nservices decide whether an item is claimable from the explicit revision, assignment,\nplanning, and relationship facts below; adapters do not hide that policy in a\nprovider-specific claim convention.",
+                "properties": {
+                  "work_item_id": {
+                    "$ref": "#/$defs/WorkItemId"
+                  },
+                  "reference": {
+                    "$ref": "#/$defs/WorkItemReference"
+                  },
+                  "title": {
+                    "maxLength": 1000,
+                    "minLength": 1,
+                    "title": "Title",
+                    "type": "string"
+                  },
+                  "body": {
+                    "default": "",
+                    "maxLength": 100000,
+                    "title": "Body",
+                    "type": "string"
+                  },
+                  "state": {
+                    "maxLength": 200,
+                    "minLength": 1,
+                    "title": "State",
+                    "type": "string"
+                  },
+                  "labels": {
+                    "default": [],
+                    "items": {
+                      "type": "string"
+                    },
+                    "title": "Labels",
+                    "type": "array"
+                  },
+                  "repository_reference": {
+                    "anyOf": [
+                      {
+                        "maxLength": 1000,
+                        "minLength": 1,
+                        "type": "string"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ],
+                    "default": null,
+                    "title": "Repository Reference"
+                  },
+                  "provider_revision": {
+                    "maxLength": 500,
+                    "minLength": 1,
+                    "title": "Provider Revision",
+                    "type": "string"
+                  },
+                  "assignees": {
+                    "default": [],
+                    "items": {
+                      "type": "string"
+                    },
+                    "title": "Assignees",
+                    "type": "array"
+                  },
+                  "parent": {
+                    "anyOf": [
+                      {
+                        "$ref": "#/$defs/WorkItemReference"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ],
+                    "default": null
+                  },
+                  "blocked_by": {
+                    "default": [],
+                    "items": {
+                      "$ref": "#/$defs/WorkItemReference"
+                    },
+                    "title": "Blocked By",
+                    "type": "array"
+                  },
+                  "blocking": {
+                    "default": [],
+                    "items": {
+                      "$ref": "#/$defs/WorkItemReference"
+                    },
+                    "title": "Blocking",
+                    "type": "array"
+                  },
+                  "priority": {
+                    "anyOf": [
+                      {
+                        "maxLength": 100,
+                        "minLength": 1,
+                        "type": "string"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ],
+                    "default": null,
+                    "title": "Priority"
+                  },
+                  "timebox": {
+                    "anyOf": [
+                      {
+                        "maxLength": 200,
+                        "minLength": 1,
+                        "type": "string"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ],
+                    "default": null,
+                    "title": "Timebox"
+                  },
+                  "project": {
+                    "anyOf": [
+                      {
+                        "maxLength": 500,
+                        "minLength": 1,
+                        "type": "string"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ],
+                    "default": null,
+                    "title": "Project"
+                  },
+                  "estimate_points": {
+                    "anyOf": [
+                      {
+                        "maximum": 8,
+                        "minimum": 0,
+                        "type": "integer"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ],
+                    "default": null,
+                    "title": "Estimate Points"
+                  },
+                  "updated_at": {
+                    "format": "date-time",
+                    "title": "Updated At",
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "work_item_id",
+                  "reference",
+                  "title",
+                  "state",
+                  "provider_revision",
+                  "updated_at"
+                ],
+                "title": "WorkItem",
+                "type": "object"
+              }
+            }
+          },
+          "required": true
+        }
+      ],
+      "failure_policy": {
+        "behavior": "halt"
+      },
+      "kind": "work_item_tracker",
+      "action": "transition"
+    },
+    {
+      "step_definition_id": "close_note",
+      "name": "Comment what closed it",
+      "description": "Post the reporter's note on the Work Item after it is closed, so the comment states a fact about a ticket that is already in its closing state.",
+      "dependencies": [
+        {
+          "step_definition_id": "close_close_ticket",
+          "mode": "required"
+        }
+      ],
+      "inputs": [
+        {
+          "input_name": "id",
+          "value": {
+            "kind": "work_item",
+            "field": "reference",
+            "data_schema": {
+              "content_digest": "sha256:8964c31cef243ee9c4419f51e52a90efb43965f49dd8971905df8f1a955ddf0b",
+              "contract": {
+                "schema_name": "WorkItemReference",
+                "json_schema": {
+                  "type": "object",
+                  "properties": {
+                    "provider_name": {
+                      "type": "string",
+                      "minLength": 1,
+                      "maxLength": 100
+                    },
+                    "external_id": {
+                      "type": "string",
+                      "minLength": 1,
+                      "maxLength": 500
+                    },
+                    "url": {
+                      "anyOf": [
+                        {
+                          "type": "string",
+                          "minLength": 1,
+                          "maxLength": 4096
+                        },
+                        {
+                          "type": "null"
+                        }
+                      ]
+                    }
+                  },
+                  "required": [
+                    "provider_name",
+                    "external_id"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          }
+        },
+        {
+          "input_name": "note",
+          "value": {
+            "kind": "upstream_output",
+            "step_definition_id": "close_summarize",
+            "output_name": "note",
+            "data_schema": {
+              "content_digest": "sha256:574bb972a9043f5f048277cca137332e61039b7390202bead2c22ca483701cca",
+              "contract": {
+                "schema_name": "TrackerCommentNote",
+                "json_schema": {
+                  "type": "string",
+                  "minLength": 1,
+                  "maxLength": 100000
+                }
+              }
+            }
+          }
+        }
+      ],
+      "outputs": [
+        {
+          "kind": "value",
+          "output_name": "comment",
+          "data_schema": {
+            "content_digest": "sha256:f106d7d43fcede20b5b385805595db3146abf69e4271340f2d5c49f542cd7a31",
+            "contract": {
+              "schema_name": "TrackerCommentOutput",
+              "json_schema": {
+                "type": "object",
+                "properties": {
+                  "comment_id": {
+                    "anyOf": [
+                      {
+                        "type": "string",
+                        "minLength": 1,
+                        "maxLength": 500
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ]
+                  }
+                },
+                "required": [
+                  "comment_id"
+                ],
+                "additionalProperties": false
+              }
+            }
+          },
+          "required": true
+        }
+      ],
+      "failure_policy": {
+        "behavior": "halt"
+      },
+      "kind": "work_item_tracker",
+      "action": "comment"
+    }
+  ],
+  "inputs": [
+    {
+      "input_name": "depth",
+      "description": "Whether the phase researches the Work Item before planning it, or plans it straight away.",
+      "data_schema": {
+        "content_digest": "sha256:plan-depth",
+        "contract": {
+          "schema_name": "PlanDepth",
+          "json_schema": {
+            "type": "string",
+            "enum": [
+              "shallow",
+              "full"
+            ]
+          }
+        }
+      },
+      "required": true
+    }
+  ]
+}

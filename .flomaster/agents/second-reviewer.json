@@ -1,0 +1,75 @@
+{
+  "agent_profile_id": "agent_profile_review_second_pass",
+  "version": "1",
+  "agent_id": {
+    "value": "agent_review_second_pass"
+  },
+  "name": "Second Reviewer",
+  "responsibility": "Read the change again and record the concern it raised as settled or not.",
+  "profile": {
+    "profile_id": "review_second_pass",
+    "version": "1",
+    "runtime_id": "claude_agent_sdk",
+    "allowed_model_ids": [
+      "claude-haiku-5-5"
+    ],
+    "preferred_model_id": "claude-haiku-5-5",
+    "max_turns": 4,
+    "max_output_tokens": 2048,
+    "max_cost_usd": 1.0
+  },
+  "prompt": {
+    "definition_id": "second_review_prompt",
+    "version": "1"
+  },
+  "operation_grants": [],
+  "sdk_tool_ids": [],
+  "skill_ids": [],
+  "result_schema": {
+    "content_digest": "sha256:review-second-pass-finding",
+    "contract": {
+      "schema_name": "ReviewFinding",
+      "json_schema": {
+        "type": "object",
+        "properties": {
+          "finding_id": {
+            "type": "string",
+            "maxLength": 200
+          },
+          "severity": {
+            "type": "string",
+            "enum": [
+              "skippable",
+              "technical_debt",
+              "blocker"
+            ]
+          },
+          "location": {
+            "type": "string",
+            "maxLength": 1000
+          },
+          "summary": {
+            "type": "string",
+            "maxLength": 2000
+          },
+          "resolution": {
+            "type": "string",
+            "maxLength": 2000
+          },
+          "resolved": {
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "finding_id",
+          "severity",
+          "location",
+          "summary",
+          "resolution",
+          "resolved"
+        ],
+        "additionalProperties": false
+      }
+    }
+  }
+}

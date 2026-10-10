@@ -1,0 +1,52 @@
+{
+  "agent_profile_id": "agent_profile_plan_researcher",
+  "version": "1",
+  "agent_id": {
+    "value": "agent_plan_researcher"
+  },
+  "name": "Plan Researcher",
+  "responsibility": "State what has to be learned before a plan for one Work Item can be written.",
+  "profile": {
+    "profile_id": "plan_researcher",
+    "version": "1",
+    "runtime_id": "claude_agent_sdk",
+    "allowed_model_ids": [
+      "claude-haiku-5-5"
+    ],
+    "preferred_model_id": "claude-haiku-5-5",
+    "max_turns": 2,
+    "max_output_tokens": 2048,
+    "max_cost_usd": 1.0
+  },
+  "prompt": {
+    "definition_id": "research_prompt",
+    "version": "1"
+  },
+  "operation_grants": [],
+  "sdk_tool_ids": [],
+  "skill_ids": [],
+  "result_schema": {
+    "content_digest": "sha256:plan-research-envelope",
+    "contract": {
+      "schema_name": "PlanResearch",
+      "json_schema": {
+        "type": "object",
+        "properties": {
+          "questions": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "maxLength": 300
+            },
+            "minItems": 1,
+            "maxItems": 5
+          }
+        },
+        "required": [
+          "questions"
+        ],
+        "additionalProperties": false
+      }
+    }
+  }
+}

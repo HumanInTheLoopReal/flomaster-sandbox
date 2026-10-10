@@ -1,0 +1,74 @@
+{
+  "agent_profile_id": "agent_profile_delivery_review_first_pass",
+  "version": "1",
+  "agent_id": {
+    "value": "agent_review_first_pass"
+  },
+  "name": "First Reviewer",
+  "responsibility": "Judge one change against its request and raise at most one concern about it.",
+  "profile": {
+    "profile_id": "delivery_review_first_pass",
+    "version": "1",
+    "runtime_id": "claude_agent_sdk",
+    "allowed_model_ids": [
+      "claude-haiku-5-5"
+    ],
+    "preferred_model_id": "claude-haiku-5-5",
+    "max_turns": 4,
+    "max_output_tokens": 2048,
+    "max_cost_usd": 1.0
+  },
+  "prompt": {
+    "definition_id": "first_review_prompt",
+    "version": "1"
+  },
+  "operation_grants": [],
+  "sdk_tool_ids": [
+    "read_workspace",
+    "search_workspace"
+  ],
+  "skill_ids": [],
+  "result_schema": {
+    "content_digest": "sha256:review-first-pass-verdict",
+    "contract": {
+      "schema_name": "ReviewVerdict",
+      "json_schema": {
+        "type": "object",
+        "properties": {
+          "status": {
+            "type": "string",
+            "enum": [
+              "approved",
+              "changes_requested"
+            ]
+          },
+          "summary": {
+            "type": "string",
+            "maxLength": 2000
+          },
+          "finding_id": {
+            "type": "string",
+            "maxLength": 200
+          },
+          "severity": {
+            "type": "string",
+            "enum": [
+              "skippable",
+              "technical_debt",
+              "blocker"
+            ]
+          },
+          "location": {
+            "type": "string",
+            "maxLength": 1000
+          }
+        },
+        "required": [
+          "status",
+          "summary"
+        ],
+        "additionalProperties": false
+      }
+    }
+  }
+}

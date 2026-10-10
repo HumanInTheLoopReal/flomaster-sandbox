@@ -1,0 +1,47 @@
+{
+  "agent_profile_id": "agent_profile_review_repair",
+  "version": "1",
+  "agent_id": {
+    "value": "agent_review_repair"
+  },
+  "name": "Review Repairer",
+  "responsibility": "Make the one change a reviewer asked for and report it for a second reading.",
+  "profile": {
+    "profile_id": "review_repair",
+    "version": "1",
+    "runtime_id": "claude_agent_sdk",
+    "allowed_model_ids": [
+      "claude-haiku-5-5"
+    ],
+    "preferred_model_id": "claude-haiku-5-5",
+    "max_turns": 6,
+    "max_output_tokens": 2048,
+    "max_cost_usd": 1.0
+  },
+  "prompt": {
+    "definition_id": "repair_prompt",
+    "version": "1"
+  },
+  "operation_grants": [],
+  "sdk_tool_ids": [],
+  "skill_ids": [],
+  "result_schema": {
+    "content_digest": "sha256:review-repair-resolution",
+    "contract": {
+      "schema_name": "ReviewRepairNote",
+      "json_schema": {
+        "type": "object",
+        "properties": {
+          "resolution": {
+            "type": "string",
+            "maxLength": 2000
+          }
+        },
+        "required": [
+          "resolution"
+        ],
+        "additionalProperties": false
+      }
+    }
+  }
+}

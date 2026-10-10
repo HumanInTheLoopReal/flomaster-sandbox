@@ -1,0 +1,56 @@
+{
+  "agent_profile_id": "agent_profile_validate_scope_judge",
+  "version": "1",
+  "agent_id": {
+    "value": "agent_validate_scope_judge"
+  },
+  "name": "Validation Scope Judge",
+  "responsibility": "Decide whether one change needs an end-to-end check and say why.",
+  "profile": {
+    "profile_id": "validate_scope_judge",
+    "version": "1",
+    "runtime_id": "claude_agent_sdk",
+    "allowed_model_ids": [
+      "claude-haiku-5-5"
+    ],
+    "preferred_model_id": "claude-haiku-5-5",
+    "max_turns": 2,
+    "max_output_tokens": 2048,
+    "max_cost_usd": 1.0
+  },
+  "prompt": {
+    "definition_id": "decide_e2e_prompt",
+    "version": "1"
+  },
+  "operation_grants": [],
+  "sdk_tool_ids": [],
+  "skill_ids": [],
+  "result_schema": {
+    "content_digest": "sha256:validate-e2e-decision-envelope",
+    "contract": {
+      "schema_name": "ValidateEndToEndDecision",
+      "json_schema": {
+        "type": "object",
+        "properties": {
+          "needs_e2e": {
+            "type": "string",
+            "enum": [
+              "required",
+              "not_required"
+            ]
+          },
+          "reason": {
+            "type": "string",
+            "minLength": 30,
+            "maxLength": 400
+          }
+        },
+        "required": [
+          "needs_e2e",
+          "reason"
+        ],
+        "additionalProperties": false
+      }
+    }
+  }
+}

@@ -1,0 +1,20 @@
+{
+  "schema_definition_id": "git_stage_paths",
+  "version": "1",
+  "data_schema": {
+    "content_digest": "sha256:baf3f14c5ff42d64c507d09861ae5a99da2e9a79a9da03be3375389a8bc86599",
+    "contract": {
+      "schema_name": "GitStagePaths",
+      "json_schema": {
+        "type": "array",
+        "minItems": 1,
+        "uniqueItems": true,
+        "items": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 4096
+        }
+      }
+    }
+  }
+}

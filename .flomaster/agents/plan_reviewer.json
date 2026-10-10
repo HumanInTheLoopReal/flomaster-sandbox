@@ -1,0 +1,130 @@
+{
+  "agent_profile_id": "agent_profile_plan_reviewer",
+  "version": "1",
+  "agent_id": {
+    "value": "agent_plan_reviewer"
+  },
+  "name": "Plan Reviewer",
+  "responsibility": "Judge one written plan against its Work Item along each declared dimension and return a verdict with its reason.",
+  "profile": {
+    "profile_id": "plan_reviewer",
+    "version": "1",
+    "runtime_id": "claude_agent_sdk",
+    "allowed_model_ids": [
+      "claude-haiku-5-5"
+    ],
+    "preferred_model_id": "claude-haiku-5-5",
+    "max_turns": 2,
+    "max_output_tokens": 2048,
+    "max_cost_usd": 1.0
+  },
+  "prompt": {
+    "definition_id": "review_plan_prompt",
+    "version": "1"
+  },
+  "operation_grants": [],
+  "sdk_tool_ids": [],
+  "skill_ids": [],
+  "result_schema": {
+    "content_digest": "sha256:plan-review-envelope",
+    "contract": {
+      "schema_name": "PlanReview",
+      "json_schema": {
+        "type": "object",
+        "properties": {
+          "verdict": {
+            "type": "string",
+            "enum": [
+              "approve",
+              "revise"
+            ]
+          },
+          "reason": {
+            "type": "string",
+            "maxLength": 400
+          },
+          "findings": {
+            "type": "object",
+            "properties": {
+              "architecture": {
+                "type": "object",
+                "properties": {
+                  "result": {
+                    "type": "string",
+                    "enum": [
+                      "pass",
+                      "fail"
+                    ]
+                  },
+                  "finding": {
+                    "type": "string",
+                    "maxLength": 400
+                  }
+                },
+                "required": [
+                  "result",
+                  "finding"
+                ],
+                "additionalProperties": false
+              },
+              "security": {
+                "type": "object",
+                "properties": {
+                  "result": {
+                    "type": "string",
+                    "enum": [
+                      "pass",
+                      "fail"
+                    ]
+                  },
+                  "finding": {
+                    "type": "string",
+                    "maxLength": 400
+                  }
+                },
+                "required": [
+                  "result",
+                  "finding"
+                ],
+                "additionalProperties": false
+              },
+              "scope": {
+                "type": "object",
+                "properties": {
+                  "result": {
+                    "type": "string",
+                    "enum": [
+                      "pass",
+                      "fail"
+                    ]
+                  },
+                  "finding": {
+                    "type": "string",
+                    "maxLength": 400
+                  }
+                },
+                "required": [
+                  "result",
+                  "finding"
+                ],
+                "additionalProperties": false
+              }
+            },
+            "required": [
+              "architecture",
+              "security",
+              "scope"
+            ],
+            "additionalProperties": false
+          }
+        },
+        "required": [
+          "verdict",
+          "reason",
+          "findings"
+        ],
+        "additionalProperties": false
+      }
+    }
+  }
+}

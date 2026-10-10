@@ -1,0 +1,345 @@
+{
+  "workflow_definition_id": {
+    "value": "workflow_implement"
+  },
+  "version": "1",
+  "name": "Implement",
+  "description": "Make one Work Item's change, prove the unit suite passes over it, and commit it on the Run's branch.",
+  "visibility": "public",
+  "steps": [
+    {
+      "kind": "agent",
+      "step_definition_id": "code",
+      "name": "Make the change",
+      "description": "Ask the implementing Agent to change the Workspace and write the note that explains the change.",
+      "agent": {
+        "agent_profile_id": "agent_profile_implement_coder",
+        "version": "1"
+      },
+      "runtime": {
+        "runtime_id": "claude_agent_sdk",
+        "sdk_tool_ids": [
+          "read_workspace",
+          "search_workspace",
+          "write_workspace"
+        ],
+        "skill_ids": [],
+        "budget": {
+          "max_turns": 8,
+          "max_cost_usd": 1.0
+        },
+        "context_token_budget": 8000
+      },
+      "granted_operations": [],
+      "outputs": [
+        {
+          "kind": "value",
+          "output_name": "change_summary",
+          "data_schema": {
+            "content_digest": "sha256:implement-change-summary",
+            "contract": {
+              "schema_name": "ImplementChangeSummary",
+              "json_schema": {
+                "type": "string",
+                "maxLength": 400
+              }
+            }
+          },
+          "required": true
+        },
+        {
+          "kind": "value",
+          "output_name": "commit_subject",
+          "data_schema": {
+            "kind": "schema_asset",
+            "reference": {
+              "definition_id": "git_commit_message",
+              "version": "1"
+            }
+          },
+          "required": true
+        },
+        {
+          "kind": "value",
+          "output_name": "changed_paths",
+          "data_schema": {
+            "kind": "schema_asset",
+            "reference": {
+              "definition_id": "git_stage_paths",
+              "version": "1"
+            }
+          },
+          "required": true
+        },
+        {
+          "kind": "file",
+          "output_name": "change_note",
+          "path": {
+            "kind": "format",
+            "segments": [
+              {
+                "kind": "literal",
+                "text": "artifacts/implementation.md"
+              }
+            ],
+            "data_schema": {
+              "content_digest": "sha256:implement-change-note-path",
+              "contract": {
+                "schema_name": "ImplementChangeNotePath",
+                "json_schema": {
+                  "type": "object",
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "artifact_kind": "implementation",
+          "required": true,
+          "max_bytes": 65536
+        }
+      ]
+    },
+    {
+      "kind": "script",
+      "step_definition_id": "unit_tests",
+      "name": "Run the unit suite",
+      "description": "Run the unit suite over the changed Workspace and send the Run back to the change when it fails.",
+      "dependencies": [
+        {
+          "step_definition_id": "code",
+          "mode": "required"
+        }
+      ],
+      "executable": ".flomaster/scripts/unit_tests.sh",
+      "runtime": "posix_shell",
+      "arguments": [],
+      "restart_policy": {
+        "restart_from_step_definition_id": "code",
+        "max_restarts": 1
+      },
+      "outputs": [
+        {
+          "kind": "value",
+          "output_name": "outcome",
+          "data_schema": {
+            "content_digest": "sha256:implement-unit-test-outcome",
+            "contract": {
+              "schema_name": "ImplementUnitTestOutcome",
+              "json_schema": {
+                "type": "string",
+                "enum": [
+                  "passed"
+                ]
+              }
+            }
+          },
+          "required": true
+        },
+        {
+          "kind": "value",
+          "output_name": "attempts",
+          "data_schema": {
+            "content_digest": "sha256:implement-unit-test-attempts",
+            "contract": {
+              "schema_name": "ImplementUnitTestAttempts",
+              "json_schema": {
+                "type": "integer",
+                "minimum": 1,
+                "maximum": 100
+              }
+            }
+          },
+          "required": true
+        }
+      ]
+    },
+    {
+      "kind": "source_control",
+      "step_definition_id": "stage",
+      "name": "Stage the change",
+      "description": "Stage exactly the paths the Agent reported changing, which a commit of already-staged work needs first.",
+      "dependencies": [
+        {
+          "step_definition_id": "unit_tests",
+          "mode": "required"
+        }
+      ],
+      "action": "stage",
+      "inputs": [
+        {
+          "input_name": "paths",
+          "value": {
+            "kind": "upstream_output",
+            "step_definition_id": "code",
+            "output_name": "changed_paths",
+            "data_schema": {
+              "kind": "schema_asset",
+              "reference": {
+                "definition_id": "git_stage_paths",
+                "version": "1"
+              }
+            }
+          }
+        }
+      ],
+      "outputs": [
+        {
+          "kind": "value",
+          "output_name": "staged",
+          "data_schema": {
+            "content_digest": "sha256:c3075360354e1924c45f18e9f4b137927d6377d64f4802486b60695647224b46",
+            "contract": {
+              "schema_name": "GitStageResult",
+              "json_schema": {
+                "type": "object",
+                "properties": {
+                  "paths": {
+                    "type": "array",
+                    "minItems": 1,
+                    "uniqueItems": true,
+                    "items": {
+                      "type": "string",
+                      "minLength": 1,
+                      "maxLength": 4096
+                    }
+                  },
+                  "head_revision": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 500,
+                    "pattern": "^(?![\\s\\S]*\\s)[\\s\\S]+$"
+                  }
+                },
+                "required": [
+                  "paths",
+                  "head_revision"
+                ],
+                "additionalProperties": false
+              }
+            }
+          },
+          "required": true
+        }
+      ]
+    },
+    {
+      "kind": "source_control",
+      "step_definition_id": "commit",
+      "name": "Commit the change",
+      "description": "Commit the staged change on the Run's own branch under the subject the Agent wrote for it.",
+      "dependencies": [
+        {
+          "step_definition_id": "stage",
+          "mode": "required"
+        }
+      ],
+      "action": "commit",
+      "inputs": [
+        {
+          "input_name": "message",
+          "value": {
+            "kind": "upstream_output",
+            "step_definition_id": "code",
+            "output_name": "commit_subject",
+            "data_schema": {
+              "kind": "schema_asset",
+              "reference": {
+                "definition_id": "git_commit_message",
+                "version": "1"
+              }
+            }
+          }
+        }
+      ],
+      "outputs": [
+        {
+          "kind": "value",
+          "output_name": "commit",
+          "data_schema": {
+            "content_digest": "sha256:075cd535dc545111b773aaf43d273e4d97d42daf4327b22f3baf7f7796dedce7",
+            "contract": {
+              "schema_name": "GitCommitResult",
+              "json_schema": {
+                "$defs": {
+                  "CommitReference": {
+                    "type": "object",
+                    "properties": {
+                      "repository": {
+                        "type": "string",
+                        "minLength": 1,
+                        "maxLength": 1000,
+                        "pattern": "^(?![\\s\\S]*\\s)[\\s\\S]+$"
+                      },
+                      "revision": {
+                        "type": "string",
+                        "minLength": 1,
+                        "maxLength": 500,
+                        "pattern": "^(?![\\s\\S]*\\s)[\\s\\S]+$"
+                      },
+                      "parent_revision": {
+                        "type": "string",
+                        "minLength": 1,
+                        "maxLength": 500,
+                        "pattern": "^(?![\\s\\S]*\\s)[\\s\\S]+$"
+                      }
+                    },
+                    "required": [
+                      "repository",
+                      "revision",
+                      "parent_revision"
+                    ],
+                    "additionalProperties": false
+                  }
+                },
+                "type": "object",
+                "properties": {
+                  "commit": {
+                    "anyOf": [
+                      {
+                        "$ref": "#/$defs/CommitReference"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ]
+                  },
+                  "clean": {
+                    "type": "boolean"
+                  }
+                },
+                "required": [
+                  "commit",
+                  "clean"
+                ],
+                "additionalProperties": false,
+                "oneOf": [
+                  {
+                    "properties": {
+                      "commit": {
+                        "$ref": "#/$defs/CommitReference"
+                      },
+                      "clean": {
+                        "const": false
+                      }
+                    }
+                  },
+                  {
+                    "properties": {
+                      "commit": {
+                        "type": "null"
+                      },
+                      "clean": {
+                        "const": true
+                      }
+                    }
+                  }
+                ]
+              }
+            }
+          },
+          "required": true
+        }
+      ]
+    }
+  ]
+}
