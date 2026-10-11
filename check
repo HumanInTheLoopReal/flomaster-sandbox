@@ -1,0 +1,4 @@
+#!/bin/sh
+# Run the repository tests the same way CI does.
+set -eu
+npm test
