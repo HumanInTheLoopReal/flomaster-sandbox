@@ -83,3 +83,8 @@ export function step(state, direction = state.direction) {
     score: state.score + 1,
   };
 }
+
+// Maps any integer into 0..size-1, including negative and overflowing values.
+export function wrapCoordinate(x, size) {
+  return ((x % size) + size) % size;
+}
