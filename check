@@ -1,4 +1,6 @@
 #!/bin/sh
 # Run the repository tests the same way CI does.
 set -eu
+PATH=/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin
+export PATH
 npm test
