@@ -5,4 +5,5 @@ The game rules live in `src/snake.js`, and the browser code lives in `src/main.j
 Run `npm test` to execute the tests with Node.js 22 or later.
 Open `index.html` in a browser to play.
 Use the arrow keys (Up, Down, Left, Right) to steer the snake.
+The snake moves once every 120 milliseconds.
 Sandbox ship check for FL-316.
