@@ -1845,7 +1845,7 @@
       "description": "Read the change a second time and record the concern it raised as settled or not.",
       "dependencies": [
         {
-          "step_definition_id": "delivery_cleanup_implementation",
+          "step_definition_id": "review_confirm_component",
           "mode": "required"
         }
       ],
@@ -1865,6 +1865,52 @@
       },
       "granted_operations": [],
       "inputs": [
+        {
+          "input_name": "component_check",
+          "value": {
+            "kind": "upstream_output",
+            "step_definition_id": "review_confirm_component",
+            "output_name": "component_check",
+            "data_schema": {
+              "content_digest": "sha256:review-component-check",
+              "contract": {
+                "schema_name": "ReviewComponentCheck",
+                "json_schema": {
+                  "type": "object",
+                  "properties": {
+                    "check_name": {
+                      "type": "string",
+                      "maxLength": 300
+                    },
+                    "command": {
+                      "type": "string",
+                      "maxLength": 4096
+                    },
+                    "purpose": {
+                      "type": "string",
+                      "maxLength": 2000
+                    },
+                    "passed": {
+                      "type": "boolean"
+                    },
+                    "summary": {
+                      "type": "string",
+                      "maxLength": 5000
+                    }
+                  },
+                  "required": [
+                    "check_name",
+                    "command",
+                    "purpose",
+                    "passed",
+                    "summary"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          }
+        },
         {
           "input_name": "verdict",
           "value": {
@@ -2119,7 +2165,7 @@
       "description": "Run the fixture fast check over the changed Workspace and retain its factual result.",
       "dependencies": [
         {
-          "step_definition_id": "review_first_pass",
+          "step_definition_id": "delivery_cleanup_implementation",
           "mode": "required"
         }
       ],
