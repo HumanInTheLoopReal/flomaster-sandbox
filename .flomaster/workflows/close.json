@@ -629,7 +629,7 @@
         "runtime_id": "claude_agent_sdk",
         "budget": {
           "max_cost_usd": 0.5,
-          "max_turns": 2
+          "max_turns": 4
         },
         "context_token_budget": 4000
       }

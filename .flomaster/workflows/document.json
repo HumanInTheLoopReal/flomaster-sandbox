@@ -111,7 +111,7 @@
         "sdk_tool_ids": [],
         "skill_ids": [],
         "budget": {
-          "max_turns": 3,
+          "max_turns": 5,
           "max_cost_usd": 0.5
         },
         "context_token_budget": 8000

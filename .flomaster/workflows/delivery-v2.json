@@ -21,7 +21,7 @@
         "sdk_tool_ids": [],
         "skill_ids": [],
         "budget": {
-          "max_turns": 2,
+          "max_turns": 4,
           "max_cost_usd": 0.5
         },
         "context_token_budget": 4000
@@ -358,7 +358,7 @@
         "sdk_tool_ids": [],
         "skill_ids": [],
         "budget": {
-          "max_turns": 2,
+          "max_turns": 4,
           "max_cost_usd": 0.5
         },
         "context_token_budget": 4000
@@ -435,7 +435,7 @@
         "sdk_tool_ids": [],
         "skill_ids": [],
         "budget": {
-          "max_turns": 4,
+          "max_turns": 6,
           "max_cost_usd": 0.5
         },
         "context_token_budget": 4000
@@ -667,7 +667,7 @@
         "sdk_tool_ids": [],
         "skill_ids": [],
         "budget": {
-          "max_turns": 2,
+          "max_turns": 4,
           "max_cost_usd": 0.5
         },
         "context_token_budget": 4000
@@ -1039,7 +1039,7 @@
         ],
         "skill_ids": [],
         "budget": {
-          "max_turns": 8,
+          "max_turns": 10,
           "max_cost_usd": 1.0
         },
         "context_token_budget": 8000
@@ -1133,7 +1133,7 @@
         "sdk_tool_ids": [],
         "skill_ids": [],
         "budget": {
-          "max_turns": 2,
+          "max_turns": 4,
           "max_cost_usd": 0.5
         },
         "context_token_budget": 4000
@@ -1277,7 +1277,7 @@
         "sdk_tool_ids": [],
         "skill_ids": [],
         "budget": {
-          "max_turns": 2,
+          "max_turns": 4,
           "max_cost_usd": 0.5
         },
         "context_token_budget": 4000
@@ -1398,7 +1398,7 @@
         ],
         "skill_ids": [],
         "budget": {
-          "max_turns": 4,
+          "max_turns": 6,
           "max_cost_usd": 0.5
         },
         "context_token_budget": 4000
@@ -1504,7 +1504,7 @@
         ],
         "skill_ids": [],
         "budget": {
-          "max_turns": 6,
+          "max_turns": 8,
           "max_cost_usd": 0.5
         },
         "context_token_budget": 4000
@@ -1861,7 +1861,7 @@
         ],
         "skill_ids": [],
         "budget": {
-          "max_turns": 4,
+          "max_turns": 6,
           "max_cost_usd": 0.5
         },
         "context_token_budget": 4000
@@ -2337,7 +2337,7 @@
         "sdk_tool_ids": [],
         "skill_ids": [],
         "budget": {
-          "max_turns": 2,
+          "max_turns": 4,
           "max_cost_usd": 0.5
         },
         "context_token_budget": 4000
@@ -3282,7 +3282,7 @@
         "sdk_tool_ids": [],
         "skill_ids": [],
         "budget": {
-          "max_turns": 2,
+          "max_turns": 4,
           "max_cost_usd": 0.5
         },
         "context_token_budget": 4000
@@ -4962,7 +4962,7 @@
         "runtime_id": "claude_agent_sdk",
         "budget": {
           "max_cost_usd": 0.5,
-          "max_turns": 2
+          "max_turns": 4
         },
         "context_token_budget": 4000
       }
