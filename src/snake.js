@@ -83,3 +83,9 @@ export function step(state, direction = state.direction) {
     score: state.score + 1,
   };
 }
+
+// Maps any integer x into the range 0 to size - 1, including negative x.
+// A plain x % size would return -1 for x = -1, so the result is shifted by size before the second modulo.
+export function wrapCoordinate(x, size) {
+  return ((x % size) + size) % size;
+}
