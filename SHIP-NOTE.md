@@ -1,9 +1,11 @@
-# One-line README.md addition shipped through the ship Workflow behind a single approval
+# Add arrow-key controls sentence to README.md
 
-What changed: this change adds one line to README.md. It is carried on branch flomaster/workflow_run_01e114a8fd0c491ba4797d0a29634d79 at revision 15623d197883146f40469c8bdf809161b604ba35, in the sandbox worktree for this Run. Nothing else is part of the change.
+This change adds one sentence to README.md that names the arrow keys as the game controls. It is the bounded README edit for the FL-318 sandbox acceptance run, and it is meant to go through delivery to a merged change request with the completion proof saved.
 
-How it ships: the ship Workflow opens a change request for the one-line edit, then pauses for the one approval a person owes. After approval, the change request merges.
+Branch: flomaster/workflow_run_aaf83a0ed3a94e7ab77347fd130c7e1b
+Base revision: 34c16b625e5e8a8b90f8c3e7441e1de0e3a543f7
+Workspace: .dev/sandbox/worktrees/workflow_run_aaf83a0ed3a94e7ab77347fd130c7e1b
 
-Look at first: the single added line in README.md, to confirm it is the only edit on the branch. Then check that the change request exists and that the Run is waiting at the approval step before anyone approves.
+Look at first: the single added sentence in README.md on this branch. Check that it names the arrow keys as the game controls, that it is one sentence, and that no other file was touched.
 
-Status: I have not run the Workflow, opened the change request, approved it, or confirmed the merge. The test plan (run through the launcher, approve, confirm the merge) is still open. I also did not have the README.md diff text, so the exact wording of the line is not recorded here.
+Not established by this note: I did not open the diff, read the README, run the game, or run the delivery Workflow, so the exact wording and the merge state are unconfirmed here. The approval, merge, and saved completion proof are still outstanding.
