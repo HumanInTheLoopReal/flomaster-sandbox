@@ -23,7 +23,10 @@
     "version": "1"
   },
   "operation_grants": [],
-  "sdk_tool_ids": [],
+  "sdk_tool_ids": [
+    "read_workspace",
+    "search_workspace"
+  ],
   "skill_ids": [],
   "result_schema": {
     "content_digest": "sha256:review-second-pass-finding",

@@ -1855,7 +1855,10 @@
       },
       "runtime": {
         "runtime_id": "claude_agent_sdk",
-        "sdk_tool_ids": [],
+        "sdk_tool_ids": [
+          "read_workspace",
+          "search_workspace"
+        ],
         "skill_ids": [],
         "budget": {
           "max_turns": 4,
