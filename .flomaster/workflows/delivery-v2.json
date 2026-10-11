@@ -4970,7 +4970,7 @@
     {
       "step_definition_id": "close_close_ticket",
       "name": "Close the ticket",
-      "description": "Move the same Work Item to the closing state the reporter returned, so the ticket ends where this phase says it ended.",
+      "description": "Move the same Work Item to the done state, so the ticket ends where this phase says it ended.",
       "dependencies": [
         {
           "step_definition_id": "close_summarize",
@@ -5026,9 +5026,8 @@
         {
           "input_name": "state",
           "value": {
-            "kind": "upstream_output",
-            "step_definition_id": "close_summarize",
-            "output_name": "state",
+            "kind": "literal",
+            "value": "done",
             "data_schema": {
               "content_digest": "sha256:969a792f7c16f5a0b1ccf42ee44b1d10198478572371666d4307e6437dff4f5a",
               "contract": {
