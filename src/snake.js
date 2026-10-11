@@ -7,6 +7,11 @@ export const DIRECTIONS = {
 
 const OPPOSITES = { up: "down", down: "up", left: "right", right: "left" };
 
+// Maps any integer into 0..size-1, including negative values (wrapCoordinate(-1, 10) === 9).
+export function wrapCoordinate(x, size) {
+  return ((x % size) + size) % size;
+}
+
 // Small deterministic generator so the same seed always produces the same food positions.
 function nextRandom(seed) {
   const value = (seed * 1103515245 + 12345) & 0x7fffffff;

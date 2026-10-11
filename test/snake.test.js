@@ -1,6 +1,6 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { createGame, step, turn } from "../src/snake.js";
+import { createGame, step, turn, wrapCoordinate } from "../src/snake.js";
 
 function withFood(state, x, y) {
   return { ...state, food: { x, y } };
@@ -63,4 +63,14 @@ test("hitting its own body ends the game", () => {
   );
   const next = step(turn(state, "left"));
   assert.equal(next.over, true);
+});
+
+test("wrapCoordinate maps negative and overflowing inputs into 0..size-1", () => {
+  assert.equal(wrapCoordinate(-1, 10), 9);
+  assert.equal(wrapCoordinate(-10, 10), 0);
+  assert.equal(wrapCoordinate(-11, 10), 9);
+  assert.equal(wrapCoordinate(10, 10), 0);
+  assert.equal(wrapCoordinate(11, 10), 1);
+  assert.equal(wrapCoordinate(5, 10), 5);
+  assert.equal(wrapCoordinate(0, 10), 0);
 });
