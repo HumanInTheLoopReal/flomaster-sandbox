@@ -14,7 +14,7 @@
       "claude-haiku-5-5"
     ],
     "preferred_model_id": "claude-haiku-5-5",
-    "max_turns": 5,
+    "max_turns": 10,
     "max_output_tokens": 4096,
     "max_cost_usd": 1.0
   },
